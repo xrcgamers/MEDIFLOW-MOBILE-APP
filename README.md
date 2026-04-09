@@ -1,2 +1,1 @@
-# MEDIFLOW-MOBILE-APP
-AI- and mobile-enabled emergency intake and incident reporting system for hospitals, with public reporting, status tracking, staff triage, and operational dashboards.
+MediFlow is a hospital-focused emergency reporting and intake platform that connects the public and medical staff through a streamlined digital workflow. Public users can submit emergency incidents with live location capture and track report progress, while staff can manage incoming cases, review details, assess triage urgency, monitor resources, and respond more efficiently. Designed as a modern MVP, MediFlow combines strong UX, clean frontend architecture, and a structured backend foundation to support scalable emergency coordination.
