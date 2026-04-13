@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
-import { Text, StyleSheet, Alert, ScrollView } from "react-native";
+import { Text, StyleSheet, Alert, ScrollView, Image, View } from "react-native";
 import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
 import StatusBadge from "../../src/components/StatusBadge";
@@ -14,7 +14,8 @@ import {
   getIncidentByIdService,
   updateIncidentStatusService,
 } from "../../src/services/staffIncidentService";
-import { COLORS } from "../../src/constants/theme";
+import { API_ROOT_URL } from "../../src/config/api";
+import { COLORS, RADIUS } from "../../src/constants/theme";
 
 function getStatusType(status) {
   switch (status) {
@@ -164,6 +165,20 @@ export default function IncidentDetailsScreen() {
       <FormSection title="Incident Notes & Media">
         <InfoRow label="Reporter Notes" value={incident.notes} />
         <InfoRow label="Attached Media Count" value={String(incident.mediaCount)} />
+
+        {incident.mediaAttachments?.length ? (
+          incident.mediaAttachments.map((item) => (
+            <View key={item.id} style={styles.mediaBlock}>
+              <Image
+                source={{ uri: `${API_ROOT_URL}${item.filePath}` }}
+                style={styles.mediaImage}
+              />
+              <Text style={styles.mediaName}>{item.fileName}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No uploaded evidence available.</Text>
+        )}
       </FormSection>
 
       <FormSection title="Status History">
@@ -240,5 +255,19 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  mediaBlock: {
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  mediaImage: {
+    width: "100%",
+    height: 240,
+    borderRadius: RADIUS.lg,
+    marginBottom: 8,
+  },
+  mediaName: {
+    fontSize: 13,
+    color: COLORS.textMuted,
   },
 });

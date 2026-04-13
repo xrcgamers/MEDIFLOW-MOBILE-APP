@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, StyleSheet } from "react-native";
+import { ScrollView, Text, StyleSheet, Alert } from "react-native";
 import FormSection from "../../src/components/FormSection";
 import ResourceCard from "../../src/components/ResourceCard";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
 import { getResourcesService } from "../../src/services/resourceService";
+import { getReadableErrorMessage } from "../../src/utils/errorMessages";
 import { COLORS } from "../../src/constants/theme";
 
 export default function ResourcesScreen() {
@@ -23,7 +24,10 @@ export default function ResourcesScreen() {
         const data = await getResourcesService();
         setResources(data);
       } catch (error) {
-        console.error("Failed to load resources:", error.message);
+        Alert.alert(
+          "Resources Error",
+          getReadableErrorMessage(error, "Failed to load resources.")
+        );
       } finally {
         setIsLoading(false);
       }
@@ -47,27 +51,43 @@ export default function ResourcesScreen() {
         ) : (
           <>
             <FormSection title="Bed Availability">
-              {resources.beds.map((item) => (
-                <ResourceCard key={item.id} item={item} />
-              ))}
+              {resources.beds.length > 0 ? (
+                resources.beds.map((item) => (
+                  <ResourceCard key={item.id} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No bed data available.</Text>
+              )}
             </FormSection>
 
             <FormSection title="Theatre Readiness">
-              {resources.theatre.map((item) => (
-                <ResourceCard key={item.id} item={item} />
-              ))}
+              {resources.theatre.length > 0 ? (
+                resources.theatre.map((item) => (
+                  <ResourceCard key={item.id} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No theatre data available.</Text>
+              )}
             </FormSection>
 
             <FormSection title="Blood Status">
-              {resources.blood.map((item) => (
-                <ResourceCard key={item.id} item={item} />
-              ))}
+              {resources.blood.length > 0 ? (
+                resources.blood.map((item) => (
+                  <ResourceCard key={item.id} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No blood stock data available.</Text>
+              )}
             </FormSection>
 
             <FormSection title="Staff Coverage">
-              {resources.staff.map((item) => (
-                <ResourceCard key={item.id} item={item} />
-              ))}
+              {resources.staff.length > 0 ? (
+                resources.staff.map((item) => (
+                  <ResourceCard key={item.id} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No staff coverage data available.</Text>
+              )}
             </FormSection>
           </>
         )}
@@ -89,5 +109,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textMuted,
     marginBottom: 20,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
   },
 });

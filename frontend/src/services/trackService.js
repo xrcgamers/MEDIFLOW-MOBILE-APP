@@ -1,4 +1,5 @@
 import apiClient from "../api/client";
+import { API_ROOT_URL } from "../config/api";
 
 export async function trackReportService({ trackingCode, phoneNumber }) {
   const response = await apiClient.get(`/reports/${trackingCode.trim()}`);
@@ -10,7 +11,12 @@ export async function trackReportService({ trackingCode, phoneNumber }) {
     incidentType: report.resolvedIncidentType,
     status: report.status,
     lastUpdatedAt: report.updatedAt || report.createdAt,
-    timeline: (report.statusHistory || []).map((item) => ({
+    media: (report.mediaAttachments || []).map((item) => ({
+      id: item.id,
+      url: `${API_ROOT_URL}${item.filePath}`,
+      fileName: item.fileName,
+    })),
+    timeline: (report.statusHistory || []).map((item, index, arr) => ({
       id: item.id,
       title: item.label,
       description: `Status updated to ${item.label}`,
@@ -18,7 +24,7 @@ export async function trackReportService({ trackingCode, phoneNumber }) {
         hour: "2-digit",
         minute: "2-digit",
       }),
-      completed: true,
+      completed: index < arr.length - 1 || report.status === item.label,
     })),
   };
 }

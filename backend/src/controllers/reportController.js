@@ -17,7 +17,6 @@ exports.createReport = async (req, res) => {
       victimCount,
       phoneNumber = "",
       notes = "",
-      mediaCount = 0,
     } = req.body;
 
     if (!incidentType) {
@@ -49,6 +48,8 @@ exports.createReport = async (req, res) => {
 
     const trackingCode = generateTrackingCode();
 
+    const uploadedFile = req.file || null;
+
     const report = await prisma.report.create({
       data: {
         trackingCode,
@@ -58,12 +59,12 @@ exports.createReport = async (req, res) => {
         autoLocationText,
         manualLocationText,
         resolvedLocationText,
-        latitude,
-        longitude,
+        latitude: latitude !== null && latitude !== "" ? Number(latitude) : null,
+        longitude: longitude !== null && longitude !== "" ? Number(longitude) : null,
         victimCount: Number(victimCount),
         phoneNumber,
         notes,
-        mediaCount,
+        mediaCount: uploadedFile ? 1 : 0,
         status: "Received",
         statusHistory: {
           create: [
@@ -72,9 +73,22 @@ exports.createReport = async (req, res) => {
             },
           ],
         },
+        mediaAttachments: uploadedFile
+          ? {
+              create: [
+                {
+                  fileName: uploadedFile.filename,
+                  filePath: `/uploads/${uploadedFile.filename}`,
+                  mimeType: uploadedFile.mimetype,
+                  fileSize: uploadedFile.size,
+                },
+              ],
+            }
+          : undefined,
       },
       include: {
         statusHistory: true,
+        mediaAttachments: true,
       },
     });
 
@@ -100,7 +114,12 @@ exports.getReportByTrackingCode = async (req, res) => {
         trackingCode,
       },
       include: {
-        statusHistory: true,
+        statusHistory: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+        mediaAttachments: true,
       },
     });
 

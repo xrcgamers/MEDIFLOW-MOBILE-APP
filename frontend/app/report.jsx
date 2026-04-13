@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
-import { Text, StyleSheet, Alert, ScrollView } from "react-native";
+import { Text, StyleSheet, Alert, ScrollView, View, Image } from "react-native";
 import { INCIDENT_TYPES } from "../src/constants/reportOptions";
 import { validateReportForm } from "../src/validators/reportValidators";
 import { submitReportService } from "../src/services/reportService";
 import { getCurrentLocationService } from "../src/services/locationService";
+import { captureReportPhotoService } from "../src/services/mediaService";
 import FormInput from "../src/components/FormInput";
 import AppButton from "../src/components/AppButton";
 import FormSelect from "../src/components/FormSelect";
 import FormSection from "../src/components/FormSection";
 import PageHeader from "../src/components/PageHeader";
-import { COLORS } from "../src/constants/theme";
+import { COLORS, RADIUS } from "../src/constants/theme";
 
 export default function ReportScreen() {
   const [form, setForm] = useState({
@@ -23,11 +24,13 @@ export default function ReportScreen() {
     victimCount: "",
     phoneNumber: "",
     notes: "",
-    mediaCount: 0,
+    capturedImage: null,
   });
 
   const [errors, setErrors] = useState({});
   const [isGettingLocation, setIsGettingLocation] = useState(true);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (field, value) => {
     setForm((prev) => ({
@@ -73,15 +76,36 @@ export default function ReportScreen() {
       victimCount: "",
       phoneNumber: "",
       notes: "",
-      mediaCount: 0,
+      capturedImage: null,
     });
     setErrors({});
   };
 
-  const handleAddMediaPlaceholder = () => {
+  const handleCapturePhoto = async () => {
+    try {
+      setIsCapturingPhoto(true);
+
+      const capturedImage = await captureReportPhotoService();
+
+      if (!capturedImage) {
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        capturedImage,
+      }));
+    } catch (error) {
+      Alert.alert("Camera Error", error.message || "Failed to capture photo.");
+    } finally {
+      setIsCapturingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
     setForm((prev) => ({
       ...prev,
-      mediaCount: prev.mediaCount + 1,
+      capturedImage: null,
     }));
   };
 
@@ -94,6 +118,8 @@ export default function ReportScreen() {
     }
 
     try {
+      setIsSubmitting(true);
+
       const result = await submitReportService(form);
 
       router.push({
@@ -108,7 +134,9 @@ export default function ReportScreen() {
 
       resetForm();
     } catch (error) {
-      Alert.alert("Error", "Failed to submit report.");
+      Alert.alert("Error", error.message || "Failed to submit report.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -186,7 +214,7 @@ export default function ReportScreen() {
         />
       </FormSection>
 
-      <FormSection title="Contact & Media">
+      <FormSection title="Contact & Evidence">
         <FormInput
           label="Phone Number (Optional)"
           placeholder="07XXXXXXXX or +2567XXXXXXXX"
@@ -196,21 +224,37 @@ export default function ReportScreen() {
           error={errors.phoneNumber}
         />
 
-        <Text style={styles.mediaText}>
-          Attached Media (Placeholder): {form.mediaCount}
-        </Text>
-
         <AppButton
-          title="Add Media Placeholder"
-          onPress={handleAddMediaPlaceholder}
+          title={isCapturingPhoto ? "Opening Camera..." : "Take Photo"}
+          onPress={handleCapturePhoto}
           variant="secondary"
+          disabled={isCapturingPhoto}
         />
+
+        {form.capturedImage ? (
+          <View style={styles.previewWrap}>
+            <Image
+              source={{ uri: form.capturedImage.uri }}
+              style={styles.previewImage}
+            />
+            <Text style={styles.previewText}>Captured incident photo</Text>
+            <AppButton
+              title="Remove Photo"
+              onPress={handleRemovePhoto}
+              variant="secondary"
+            />
+          </View>
+        ) : (
+          <Text style={styles.mediaHint}>
+            Capture a real-time photo from the camera if needed.
+          </Text>
+        )}
       </FormSection>
 
       <AppButton
-        title="Submit Report"
+        title={isSubmitting ? "Submitting..." : "Submit Report"}
         onPress={handleSubmit}
-        disabled={isGettingLocation}
+        disabled={isGettingLocation || isSubmitting}
       />
     </ScrollView>
   );
@@ -232,9 +276,24 @@ const styles = StyleSheet.create({
     color: "#0f766e",
     marginBottom: 10,
   },
-  mediaText: {
+  mediaHint: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: 10,
+  },
+  previewWrap: {
+    marginTop: 14,
+  },
+  previewImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: RADIUS.lg,
+    marginBottom: 10,
+  },
+  previewText: {
     fontSize: 14,
     color: "#374151",
-    marginBottom: 10,
+    marginBottom: 4,
+    fontWeight: "600",
   },
 });

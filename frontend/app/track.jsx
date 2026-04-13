@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { Text, StyleSheet, ScrollView } from "react-native";
+import { Text, StyleSheet, ScrollView, Image, View } from "react-native";
 import { validateTrackForm } from "../src/validators/reportValidators";
 import { trackReportService } from "../src/services/trackService";
 import FormInput from "../src/components/FormInput";
@@ -9,7 +9,7 @@ import FormSection from "../src/components/FormSection";
 import TimelineItem from "../src/components/TimelineItem";
 import StatusBadge from "../src/components/StatusBadge";
 import PageHeader from "../src/components/PageHeader";
-import { COLORS } from "../src/constants/theme";
+import { COLORS, RADIUS } from "../src/constants/theme";
 
 function getTrackingStatusType(status) {
   switch (status) {
@@ -63,6 +63,7 @@ export default function TrackScreen() {
         lastUpdatedAt: new Date().toISOString(),
         status: "Unable to fetch report status right now.",
         timeline: [],
+        media: [],
       });
     }
   };
@@ -122,6 +123,17 @@ export default function TrackScreen() {
             </Text>
           </FormSection>
 
+          {trackingResult.media?.length ? (
+            <FormSection title="Captured Evidence">
+              {trackingResult.media.map((item) => (
+                <View key={item.id} style={styles.mediaBlock}>
+                  <Image source={{ uri: item.url }} style={styles.mediaImage} />
+                  <Text style={styles.mediaName}>{item.fileName}</Text>
+                </View>
+              ))}
+            </FormSection>
+          ) : null}
+
           <FormSection title="Current Status">
             <StatusBadge
               label={trackingResult.status}
@@ -175,5 +187,18 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  mediaBlock: {
+    marginBottom: 14,
+  },
+  mediaImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: RADIUS.lg,
+    marginBottom: 8,
+  },
+  mediaName: {
+    fontSize: 13,
+    color: COLORS.textMuted,
   },
 });

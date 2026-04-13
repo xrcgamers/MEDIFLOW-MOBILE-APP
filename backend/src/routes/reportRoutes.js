@@ -1,4 +1,5 @@
 const express = require("express");
+const upload = require("../middleware/uploadMiddleware");
 const {
   createReport,
   getReportByTrackingCode,
@@ -6,7 +7,7 @@ const {
 
 const router = express.Router();
 
-router.post("/", createReport);
+router.post("/", upload.single("photo"), createReport);
 router.get("/:trackingCode", getReportByTrackingCode);
 
 module.exports = router;
