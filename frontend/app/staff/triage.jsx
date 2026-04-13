@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { Text, StyleSheet, View, Alert } from "react-native";
 import FormInput from "../../src/components/FormInput";
 import AppButton from "../../src/components/AppButton";
@@ -24,6 +25,10 @@ function getUrgencyType(urgency) {
 }
 
 export default function TriageScreen() {
+  const params = useLocalSearchParams();
+  const linkedReportId = params.reportId || null;
+  const linkedTrackingCode = params.trackingCode || null;
+
   const [form, setForm] = useState({
     unconscious: false,
     notBreathingNormally: false,
@@ -45,8 +50,14 @@ export default function TriageScreen() {
   const handleAssess = async () => {
     try {
       setIsSubmitting(true);
-      const assessment = await getTriageAssessment(form);
+      const assessment = await getTriageAssessment(form, linkedReportId);
       setResult(assessment);
+      Alert.alert(
+        "Triage Saved",
+        linkedTrackingCode
+          ? `Assessment saved for report ${linkedTrackingCode}.`
+          : "Assessment completed successfully."
+      );
     } catch (error) {
       Alert.alert(
         "Assessment Failed",
@@ -63,9 +74,21 @@ export default function TriageScreen() {
         <PageHeader
           eyebrow="Clinical Decision Support"
           title="Triage Support"
-          subtitle="Advisory only. Final clinical judgment remains with staff."
+          subtitle={
+            linkedTrackingCode
+              ? `Linked to report ${linkedTrackingCode}.`
+              : "Advisory only. Final clinical judgment remains with staff."
+          }
           icon="pulse-outline"
         />
+
+        {linkedTrackingCode ? (
+          <FormSection title="Linked Incident">
+            <Text style={styles.linkedText}>
+              This triage assessment will be attached to report {linkedTrackingCode}.
+            </Text>
+          </FormSection>
+        ) : null}
 
         <FormSection title="Clinical Indicators">
           <FormSwitch
@@ -143,6 +166,11 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 110,
     backgroundColor: COLORS.background,
+  },
+  linkedText: {
+    fontSize: 14,
+    color: COLORS.text,
+    lineHeight: 21,
   },
   resultLine: {
     fontSize: 15,

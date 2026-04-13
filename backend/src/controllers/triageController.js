@@ -86,6 +86,18 @@ exports.assessTriage = async (req, res) => {
       },
     });
 
+    if (reportId) {
+      await prisma.staffActionLog.create({
+        data: {
+          reportId,
+          actionType: "TRIAGE_ASSESSMENT",
+          status: result.urgency,
+          note: result.advisory,
+          actorName: "Staff User",
+        },
+      });
+    }
+
     res.json({
       success: true,
       data: saved,

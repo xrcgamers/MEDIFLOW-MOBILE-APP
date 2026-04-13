@@ -13,6 +13,21 @@ function getStatusType(status) {
       return "info";
     case "Rejected":
       return "danger";
+    case "Duplicate":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function getUrgencyType(urgency) {
+  switch (urgency) {
+    case "Critical":
+      return "danger";
+    case "High":
+      return "warning";
+    case "Moderate":
+      return "info";
     default:
       return "neutral";
   }
@@ -25,6 +40,16 @@ export default function IncidentCard({ incident, onViewDetails }) {
         <Text style={styles.title}>{incident.incidentType}</Text>
         <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
       </View>
+
+      {incident.triageUrgency ? (
+        <View style={styles.urgencyRow}>
+          <Text style={styles.urgencyLabel}>Triage Urgency</Text>
+          <StatusBadge
+            label={incident.triageUrgency}
+            type={getUrgencyType(incident.triageUrgency)}
+          />
+        </View>
+      ) : null}
 
       {incident.evidenceImageUrl ? (
         <Image source={{ uri: incident.evidenceImageUrl }} style={styles.thumbnail} />
@@ -69,6 +94,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 6,
     color: COLORS.text,
+  },
+  urgencyRow: {
+    marginBottom: SPACING.sm,
+  },
+  urgencyLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   thumbnail: {
     width: "100%",

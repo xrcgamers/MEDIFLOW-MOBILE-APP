@@ -27,6 +27,7 @@ export default function StaffHomeScreen() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
   const loadDashboard = async (isPullRefresh = false) => {
     try {
@@ -38,6 +39,7 @@ export default function StaffHomeScreen() {
 
       const data = await getDashboardOverviewService();
       setDashboardData(data);
+      setLastRefreshed(new Date());
     } catch (error) {
       console.error("Failed to load dashboard:", error.message);
     } finally {
@@ -73,6 +75,20 @@ export default function StaffHomeScreen() {
           subtitle="Operational overview for emergency intake, triage, and readiness."
           icon="speedometer-outline"
         />
+
+        <Text style={styles.refreshHint}>
+          Auto-refreshes every 15 seconds
+        </Text>
+        <Text style={styles.lastRefreshed}>
+          Last refreshed:{" "}
+          {lastRefreshed
+            ? lastRefreshed.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })
+            : "Not yet loaded"}
+        </Text>
 
         <FormSection title="Your Session">
           <ProfileCard user={currentUser} />
@@ -123,8 +139,6 @@ export default function StaffHomeScreen() {
             variant="secondary"
           />
         </FormSection>
-
-        <Text style={styles.refreshHint}>Auto-refreshes every 15 seconds</Text>
       </ScrollView>
 
       <StaffNavBar activeRoute="/staff" />
@@ -151,6 +165,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: -10,
+    marginBottom: 4,
+  },
+  lastRefreshed: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginBottom: 16,
   },
 });

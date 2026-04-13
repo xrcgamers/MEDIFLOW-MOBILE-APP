@@ -31,15 +31,16 @@ model Report {
   statusHistory        ReportStatusHistory[]
   triageAssessments    TriageAssessment[]
   mediaAttachments     MediaAttachment[]
+  staffLogs            StaffActionLog[]
 }
 
 model ReportStatusHistory {
-  id        String   @id @default(cuid())
-  reportId   String
-  label      String
-  createdAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  reportId    String
+  label       String
+  createdAt   DateTime @default(now())
 
-  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 model TriageAssessment {
@@ -79,4 +80,16 @@ model MediaAttachment {
   createdAt   DateTime @default(now())
 
   report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+}
+
+model StaffActionLog {
+  id          String   @id @default(cuid())
+  reportId     String
+  actionType   String
+  status       String?
+  note         String?
+  actorName    String?
+  createdAt    DateTime @default(now())
+
+  report       Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }

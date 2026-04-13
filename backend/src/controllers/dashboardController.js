@@ -19,6 +19,12 @@ exports.getDashboardOverview = async (req, res) => {
       },
     });
 
+    const highUrgencyCases = await prisma.triageAssessment.count({
+      where: {
+        urgency: "High",
+      },
+    });
+
     const emergencyBedsAvailable = await prisma.resourceItem.findFirst({
       where: {
         category: "beds",
@@ -46,16 +52,47 @@ exports.getDashboardOverview = async (req, res) => {
       },
     });
 
+    const latestCritical = await prisma.triageAssessment.findFirst({
+      where: {
+        urgency: "Critical",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        report: true,
+      },
+    });
+
     const alerts = [];
 
     if (criticalCases > 0) {
       alerts.push({
         id: "alert-critical-cases",
         title: "Critical Cases Present",
-        message: `${criticalCases} critical case(s) require urgent attention.`,
+        message: latestCritical?.report?.trackingCode
+          ? `${criticalCases} critical case(s) require urgent attention. Latest: ${latestCritical.report.trackingCode}.`
+          : `${criticalCases} critical case(s) require urgent attention.`,
         level: "danger",
-        actionLabel: "Open Triage",
-        actionRoute: "/staff/triage",
+        actionLabel: "View Critical Reports",
+        actionRoute: "/staff/incidents",
+        actionParams: {
+          triageUrgency: "Critical",
+        },
+      });
+    }
+
+    if (highUrgencyCases > 0) {
+      alerts.push({
+        id: "alert-high-urgency-cases",
+        title: "High Urgency Cases Waiting",
+        message: `${highUrgencyCases} high urgency case(s) should be reviewed promptly.`,
+        level: "warning",
+        actionLabel: "View High Urgency",
+        actionRoute: "/staff/incidents",
+        actionParams: {
+          triageUrgency: "High",
+        },
       });
     }
 
@@ -76,8 +113,11 @@ exports.getDashboardOverview = async (req, res) => {
         title: "New Reports Waiting",
         message: `${newReports} newly received report(s) need review.`,
         level: "info",
-        actionLabel: "View Reports",
+        actionLabel: "View New Reports",
         actionRoute: "/staff/incidents",
+        actionParams: {
+          status: "Received",
+        },
       });
     }
 
@@ -93,6 +133,12 @@ exports.getDashboardOverview = async (req, res) => {
         label: "Critical Cases",
         value: criticalCases,
         status: criticalCases > 0 ? "danger" : "success",
+      },
+      {
+        id: "stat-high-urgency",
+        label: "High Urgency Cases",
+        value: highUrgencyCases,
+        status: highUrgencyCases > 0 ? "warning" : "success",
       },
       {
         id: "stat-beds-available",

@@ -5,6 +5,12 @@ exports.getIncidents = async (req, res) => {
     const reports = await prisma.report.findMany({
       include: {
         mediaAttachments: true,
+        triageAssessments: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -41,6 +47,12 @@ exports.getIncidentById = async (req, res) => {
             createdAt: "desc",
           },
         },
+        mediaAttachments: true,
+        staffLogs: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
@@ -67,7 +79,7 @@ exports.getIncidentById = async (req, res) => {
 exports.updateIncidentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, note = "" } = req.body;
+    const { status, note = "", actorName = "Staff User" } = req.body;
 
     if (!status) {
       return res.status(400).json({
@@ -99,9 +111,34 @@ exports.updateIncidentStatus = async (req, res) => {
             },
           ],
         },
+        staffLogs: {
+          create: [
+            {
+              actionType: "STATUS_UPDATE",
+              status,
+              note,
+              actorName,
+            },
+          ],
+        },
       },
       include: {
-        statusHistory: true,
+        statusHistory: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+        triageAssessments: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        mediaAttachments: true,
+        staffLogs: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 

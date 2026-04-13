@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Text,
   StyleSheet,
   View,
   FlatList,
   RefreshControl,
+  Pressable,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { INCIDENT_STATUS_FILTERS } from "../../src/constants/incidentFilters";
 import { INCIDENT_SORT_OPTIONS } from "../../src/constants/incidentSortOptions";
 import IncidentCard from "../../src/components/IncidentCard";
@@ -17,9 +19,10 @@ import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
 import { getIncidentsService } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
-import { COLORS } from "../../src/constants/theme";
+import { COLORS, RADIUS } from "../../src/constants/theme";
 
 const AUTO_REFRESH_INTERVAL = 15000;
+const NEW_REPORT_BANNER_DURATION = 5000;
 
 function sortIncidents(incidents, sortOption) {
   const sorted = [...incidents];
@@ -42,12 +45,25 @@ function sortIncidents(incidents, sortOption) {
 }
 
 export default function IncidentsScreen() {
-  const [selectedFilter, setSelectedFilter] = useState("All");
+  const params = useLocalSearchParams();
+
+  const [selectedFilter, setSelectedFilter] = useState(
+    params.status || "All"
+  );
   const [selectedSort, setSelectedSort] = useState("Newest First");
   const [searchQuery, setSearchQuery] = useState("");
   const [incidents, setIncidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [showNewReportBanner, setShowNewReportBanner] = useState(false);
+  const [newReportCount, setNewReportCount] = useState(0);
+  const [activeTriageUrgencyFilter, setActiveTriageUrgencyFilter] = useState(
+    params.triageUrgency || ""
+  );
+
+  const previousCountRef = useRef(0);
+  const bannerTimeoutRef = useRef(null);
 
   const loadIncidents = async (isPullRefresh = false) => {
     try {
@@ -58,7 +74,26 @@ export default function IncidentsScreen() {
       }
 
       const data = await getIncidentsService();
+
+      if (previousCountRef.current > 0 && data.length > previousCountRef.current) {
+        const difference = data.length - previousCountRef.current;
+
+        setNewReportCount(difference);
+        setShowNewReportBanner(true);
+
+        if (bannerTimeoutRef.current) {
+          clearTimeout(bannerTimeoutRef.current);
+        }
+
+        bannerTimeoutRef.current = setTimeout(() => {
+          setShowNewReportBanner(false);
+          setNewReportCount(0);
+        }, NEW_REPORT_BANNER_DURATION);
+      }
+
+      previousCountRef.current = data.length;
       setIncidents(data);
+      setLastRefreshed(new Date());
     } catch (error) {
       console.error("Failed to load incidents:", error.message);
     } finally {
@@ -74,7 +109,12 @@ export default function IncidentsScreen() {
       loadIncidents();
     }, AUTO_REFRESH_INTERVAL);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      if (bannerTimeoutRef.current) {
+        clearTimeout(bannerTimeoutRef.current);
+      }
+    };
   }, []);
 
   const filteredIncidents = useMemo(() => {
@@ -83,6 +123,11 @@ export default function IncidentsScreen() {
     const filtered = incidents.filter((incident) => {
       const matchesFilter =
         selectedFilter === "All" || incident.status === selectedFilter;
+
+      const latestTriage = incident.triageAssessments?.[0];
+      const matchesTriageUrgency =
+        !activeTriageUrgencyFilter ||
+        latestTriage?.urgency === activeTriageUrgencyFilter;
 
       const incidentType = (
         incident.resolvedIncidentType ||
@@ -98,11 +143,17 @@ export default function IncidentsScreen() {
         incidentType.includes(normalizedQuery) ||
         location.includes(normalizedQuery);
 
-      return matchesFilter && matchesSearch;
+      return matchesFilter && matchesSearch && matchesTriageUrgency;
     });
 
     return sortIncidents(filtered, selectedSort);
-  }, [incidents, selectedFilter, selectedSort, searchQuery]);
+  }, [
+    incidents,
+    selectedFilter,
+    selectedSort,
+    searchQuery,
+    activeTriageUrgencyFilter,
+  ]);
 
   const handleViewDetails = (incident) => {
     router.push({
@@ -111,8 +162,15 @@ export default function IncidentsScreen() {
     });
   };
 
+  const handleClearFilters = () => {
+    setSelectedFilter("All");
+    setActiveTriageUrgencyFilter("");
+    setSearchQuery("");
+  };
+
   const listData = filteredIncidents.map((item) => {
     const firstMedia = item.mediaAttachments?.[0];
+    const latestTriage = item.triageAssessments?.[0];
 
     return {
       ...item,
@@ -122,8 +180,17 @@ export default function IncidentsScreen() {
       reportedAt: new Date(item.createdAt).toLocaleString(),
       mediaCount: item.mediaCount || 0,
       evidenceImageUrl: firstMedia ? `${API_ROOT_URL}${firstMedia.filePath}` : null,
+      triageUrgency: latestTriage?.urgency || null,
     };
   });
+
+  const bannerLabel =
+    newReportCount === 1
+      ? "1 new report received"
+      : `${newReportCount} new reports received`;
+
+  const hasActiveRouteFilters =
+    selectedFilter !== "All" || !!activeTriageUrgencyFilter;
 
   return (
     <>
@@ -134,6 +201,32 @@ export default function IncidentsScreen() {
           subtitle="Review newly submitted public emergency reports."
           icon="document-text-outline"
         />
+
+        {activeTriageUrgencyFilter ? (
+          <View style={styles.filterBanner}>
+            <Ionicons
+              name="funnel-outline"
+              size={18}
+              color={COLORS.primaryDark}
+              style={styles.bannerIcon}
+            />
+            <Text style={styles.filterBannerText}>
+              Filtered to triage urgency: {activeTriageUrgencyFilter}
+            </Text>
+          </View>
+        ) : null}
+
+        {showNewReportBanner ? (
+          <View style={styles.banner}>
+            <Ionicons
+              name="notifications"
+              size={18}
+              color={COLORS.primaryDark}
+              style={styles.bannerIcon}
+            />
+            <Text style={styles.bannerText}>{bannerLabel}</Text>
+          </View>
+        ) : null}
 
         <FormSection title="Find Reports">
           <FormInput
@@ -158,6 +251,18 @@ export default function IncidentsScreen() {
             options={INCIDENT_SORT_OPTIONS}
             placeholder="Select sort option"
           />
+
+          {hasActiveRouteFilters ? (
+            <Pressable style={styles.clearButton} onPress={handleClearFilters}>
+              <Ionicons
+                name="close-circle-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.clearIcon}
+              />
+              <Text style={styles.clearText}>Clear active filters</Text>
+            </Pressable>
+          ) : null}
         </FormSection>
 
         {isLoading ? (
@@ -180,9 +285,21 @@ export default function IncidentsScreen() {
               />
             }
             ListHeaderComponent={
-              <Text style={styles.refreshHint}>
-                Auto-refreshes every 15 seconds
-              </Text>
+              <View style={styles.headerInfo}>
+                <Text style={styles.refreshHint}>
+                  Auto-refreshes every 15 seconds
+                </Text>
+                <Text style={styles.lastRefreshed}>
+                  Last refreshed:{" "}
+                  {lastRefreshed
+                    ? lastRefreshed.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    : "Not yet loaded"}
+                </Text>
+              </View>
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -210,6 +327,64 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
+  headerInfo: {
+    marginBottom: 10,
+  },
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.infoBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  filterBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  bannerIcon: {
+    marginRight: 8,
+  },
+  bannerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
+  },
+  filterBannerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  clearButton: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.infoBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  clearIcon: {
+    marginRight: 6,
+  },
+  clearText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
+  },
   emptyState: {
     paddingVertical: 24,
     alignItems: "center",
@@ -222,6 +397,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: 4,
+  },
+  lastRefreshed: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginBottom: 6,
   },
 });

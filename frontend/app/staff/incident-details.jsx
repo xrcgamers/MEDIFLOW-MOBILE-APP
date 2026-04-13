@@ -19,6 +19,8 @@ import FormInput from "../../src/components/FormInput";
 import FormSelect from "../../src/components/FormSelect";
 import InfoRow from "../../src/components/InfoRow";
 import HistoryItem from "../../src/components/HistoryItem";
+import StaffLogItem from "../../src/components/StaffLogItem";
+import QuickStatusAction from "../../src/components/QuickStatusAction";
 import PageHeader from "../../src/components/PageHeader";
 import { PUBLIC_REPORT_STATUSES } from "../../src/constants/statusOptions";
 import {
@@ -26,7 +28,34 @@ import {
   updateIncidentStatusService,
 } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
-import { COLORS, RADIUS } from "../../src/constants/theme";
+import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
+
+const QUICK_STATUS_PRESETS = [
+  {
+    label: "Under Review",
+    note: "Incident is being reviewed by emergency staff.",
+  },
+  {
+    label: "Accepted",
+    note: "Incident accepted for response and further handling.",
+  },
+  {
+    label: "Response In Progress",
+    note: "Emergency response handling is currently in progress.",
+  },
+  {
+    label: "Rejected",
+    note: "Incident report was reviewed and rejected.",
+  },
+  {
+    label: "Duplicate",
+    note: "This incident was identified as a duplicate report.",
+  },
+  {
+    label: "Closed",
+    note: "Incident handling has been completed and closed.",
+  },
+];
 
 function getStatusType(status) {
   switch (status) {
@@ -41,6 +70,19 @@ function getStatusType(status) {
       return "info";
     case "Rejected":
       return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function getUrgencyType(urgency) {
+  switch (urgency) {
+    case "Critical":
+      return "danger";
+    case "High":
+      return "warning";
+    case "Moderate":
+      return "info";
     default:
       return "neutral";
   }
@@ -80,6 +122,11 @@ export default function IncidentDetailsScreen() {
   const handleReject = () => setSelectedStatus("Rejected");
   const handleMarkDuplicate = () => setSelectedStatus("Duplicate");
 
+  const handlePresetSelect = (preset) => {
+    setSelectedStatus(preset.label);
+    setStaffNote(preset.note);
+  };
+
   const handleUpdateStatus = async () => {
     if (!incident) return;
 
@@ -88,6 +135,7 @@ export default function IncidentDetailsScreen() {
       const updated = await updateIncidentStatusService(incident.id, {
         status: selectedStatus,
         note: staffNote,
+        actorName: "Triage Nurse",
       });
 
       setIncident(updated);
@@ -102,7 +150,13 @@ export default function IncidentDetailsScreen() {
   };
 
   const handleProceedToTriage = () => {
-    router.push("/staff/triage");
+    router.push({
+      pathname: "/staff/triage",
+      params: {
+        reportId: incident.id,
+        trackingCode: incident.trackingCode,
+      },
+    });
   };
 
   const openPreview = (url) => {
@@ -171,6 +225,8 @@ export default function IncidentDetailsScreen() {
     incident.latitude !== undefined &&
     incident.longitude !== null &&
     incident.longitude !== undefined;
+
+  const latestTriage = incident.triageAssessments?.[0] || null;
 
   return (
     <>
@@ -266,6 +322,45 @@ export default function IncidentDetailsScreen() {
           )}
         </FormSection>
 
+        <FormSection title="Latest Triage Assessment">
+          {latestTriage ? (
+            <>
+              <StatusBadge
+                label={latestTriage.urgency}
+                type={getUrgencyType(latestTriage.urgency)}
+              />
+              <InfoRow label="Score" value={String(latestTriage.score)} />
+              <InfoRow label="Advisory" value={latestTriage.advisory} />
+              <InfoRow
+                label="Assessed At"
+                value={new Date(latestTriage.createdAt).toLocaleString()}
+              />
+              <Text style={styles.reasonTitle}>Reasons</Text>
+              {latestTriage.reasons?.length ? (
+                latestTriage.reasons.map((reason) => (
+                  <Text key={reason} style={styles.reasonItem}>
+                    • {reason}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.reasonItem}>• No reasons recorded</Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.emptyText}>No triage assessment linked yet.</Text>
+          )}
+        </FormSection>
+
+        <FormSection title="Staff Audit Log">
+          {incident.staffLogs?.length ? (
+            incident.staffLogs.map((log) => (
+              <StaffLogItem key={log.id} item={log} />
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No staff actions recorded yet.</Text>
+          )}
+        </FormSection>
+
         <FormSection title="Status History">
           {incident.statusHistory?.length ? (
             incident.statusHistory.map((item) => (
@@ -301,6 +396,22 @@ export default function IncidentDetailsScreen() {
         </FormSection>
 
         <FormSection title="Public Tracking Update">
+          <Text style={styles.quickTitle}>Quick Presets</Text>
+          <View style={styles.quickWrap}>
+            {QUICK_STATUS_PRESETS.map((preset) => (
+              <QuickStatusAction
+                key={preset.label}
+                label={preset.label}
+                active={selectedStatus === preset.label}
+                onPress={() => handlePresetSelect(preset)}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.quickHint}>
+            Tap a preset to auto-fill the status and a suggested staff note.
+          </Text>
+
           <FormSelect
             label="Public Status"
             selectedValue={selectedStatus}
@@ -410,6 +521,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.primaryDark,
     fontWeight: "700",
+  },
+  reasonTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    marginTop: 8,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  reasonItem: {
+    fontSize: 14,
+    color: COLORS.text,
+    marginBottom: 6,
+  },
+  quickTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  quickWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: SPACING.xs,
+  },
+  quickHint: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    lineHeight: 19,
   },
   modalOverlay: {
     flex: 1,

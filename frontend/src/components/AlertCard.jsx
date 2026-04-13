@@ -19,6 +19,20 @@ function getAlertIcon(level) {
 }
 
 export default function AlertCard({ item }) {
+  const handleNavigate = () => {
+    if (!item.actionRoute) return;
+
+    if (item.actionParams) {
+      router.push({
+        pathname: item.actionRoute,
+        params: item.actionParams,
+      });
+      return;
+    }
+
+    router.push(item.actionRoute);
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.topRow}>
@@ -39,7 +53,7 @@ export default function AlertCard({ item }) {
       {item.actionLabel && item.actionRoute ? (
         <AppButton
           title={item.actionLabel}
-          onPress={() => router.push(item.actionRoute)}
+          onPress={handleNavigate}
           variant="secondary"
         />
       ) : null}
