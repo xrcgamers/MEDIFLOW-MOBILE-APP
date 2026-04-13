@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Image } from "react-native";
 import AppButton from "./AppButton";
 import StatusBadge from "./StatusBadge";
 import { COLORS, RADIUS, SPACING, SHADOW } from "../constants/theme";
+import { getPriorityType } from "../utils/priority";
 
 function getStatusType(status) {
   switch (status) {
@@ -15,6 +16,8 @@ function getStatusType(status) {
       return "danger";
     case "Duplicate":
       return "warning";
+    case "Closed":
+      return "success";
     default:
       return "neutral";
   }
@@ -41,15 +44,21 @@ export default function IncidentCard({ incident, onViewDetails }) {
         <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
       </View>
 
-      {incident.triageUrgency ? (
-        <View style={styles.urgencyRow}>
-          <Text style={styles.urgencyLabel}>Triage Urgency</Text>
+      <View style={styles.badgeRow}>
+        {incident.priorityLevel ? (
           <StatusBadge
-            label={incident.triageUrgency}
+            label={`Priority: ${incident.priorityLevel}`}
+            type={getPriorityType(incident.priorityLevel)}
+          />
+        ) : null}
+
+        {incident.triageUrgency ? (
+          <StatusBadge
+            label={`Triage: ${incident.triageUrgency}`}
             type={getUrgencyType(incident.triageUrgency)}
           />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
 
       {incident.evidenceImageUrl ? (
         <Image source={{ uri: incident.evidenceImageUrl }} style={styles.thumbnail} />
@@ -89,22 +98,17 @@ const styles = StyleSheet.create({
   topRow: {
     marginBottom: SPACING.sm,
   },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
   title: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 6,
     color: COLORS.text,
-  },
-  urgencyRow: {
-    marginBottom: SPACING.sm,
-  },
-  urgencyLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textMuted,
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   thumbnail: {
     width: "100%",

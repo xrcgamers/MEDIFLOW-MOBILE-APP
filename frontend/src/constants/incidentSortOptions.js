@@ -3,4 +3,6 @@ export const INCIDENT_SORT_OPTIONS = [
   "Oldest First",
   "Highest Victims",
   "Lowest Victims",
+  "Highest Priority",
+  "Lowest Priority",
 ];

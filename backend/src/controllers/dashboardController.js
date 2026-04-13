@@ -64,6 +64,71 @@ exports.getDashboardOverview = async (req, res) => {
       },
     });
 
+    const allResources = await prisma.resourceItem.findMany();
+
+    const lowBeds = Number(emergencyBedsAvailable?.value || 0);
+    const lowBloodItems = allResources.filter(
+      (item) =>
+        item.category === "blood" &&
+        (item.status === "Low" || item.status === "Critical")
+    );
+
+    const limitedStaffItems = allResources.filter(
+      (item) =>
+        item.category === "staff" &&
+        (item.status === "Limited" ||
+          item.status === "Off Duty" ||
+          item.status === "Critical")
+    );
+
+    const resourceAlerts = [];
+
+    if (lowBeds <= 2) {
+      resourceAlerts.push({
+        id: "resource-beds",
+        title: "Emergency Beds Running Low",
+        value: String(lowBeds),
+        status: lowBeds === 0 ? "danger" : "warning",
+        route: "/staff/resources",
+        params: { section: "beds" },
+      });
+    }
+
+    if (theatresReadyCount <= 1) {
+      resourceAlerts.push({
+        id: "resource-theatre",
+        title: "Limited Theatre Readiness",
+        value: String(theatresReadyCount),
+        status: theatresReadyCount === 0 ? "danger" : "warning",
+        route: "/staff/resources",
+        params: { section: "theatre" },
+      });
+    }
+
+    if (lowBloodItems.length > 0) {
+      resourceAlerts.push({
+        id: "resource-blood",
+        title: "Blood Stock Attention Needed",
+        value: String(lowBloodItems.length),
+        status: lowBloodItems.some((item) => item.status === "Critical")
+          ? "danger"
+          : "warning",
+        route: "/staff/resources",
+        params: { section: "blood" },
+      });
+    }
+
+    if (limitedStaffItems.length > 0) {
+      resourceAlerts.push({
+        id: "resource-staff",
+        title: "Staff Coverage Constraints",
+        value: String(limitedStaffItems.length),
+        status: "warning",
+        route: "/staff/resources",
+        params: { section: "staff" },
+      });
+    }
+
     const alerts = [];
 
     if (criticalCases > 0) {
@@ -77,7 +142,7 @@ exports.getDashboardOverview = async (req, res) => {
         actionLabel: "View Critical Reports",
         actionRoute: "/staff/incidents",
         actionParams: {
-          triageUrgency: "Critical",
+          priority: "Critical",
         },
       });
     }
@@ -91,7 +156,7 @@ exports.getDashboardOverview = async (req, res) => {
         actionLabel: "View High Urgency",
         actionRoute: "/staff/incidents",
         actionParams: {
-          triageUrgency: "High",
+          priority: "High",
         },
       });
     }
@@ -102,8 +167,11 @@ exports.getDashboardOverview = async (req, res) => {
         title: "Low Blood Stock",
         message: "O Negative blood stock is low.",
         level: "warning",
-        actionLabel: "View Resources",
+        actionLabel: "View Blood Stock",
         actionRoute: "/staff/resources",
+        actionParams: {
+          section: "blood",
+        },
       });
     }
 
@@ -160,6 +228,7 @@ exports.getDashboardOverview = async (req, res) => {
       data: {
         stats,
         alerts,
+        resourceAlerts,
       },
     });
   } catch (error) {

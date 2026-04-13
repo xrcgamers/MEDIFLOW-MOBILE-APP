@@ -21,6 +21,8 @@ import InfoRow from "../../src/components/InfoRow";
 import HistoryItem from "../../src/components/HistoryItem";
 import StaffLogItem from "../../src/components/StaffLogItem";
 import QuickStatusAction from "../../src/components/QuickStatusAction";
+import SummaryPill from "../../src/components/SummaryPill";
+import PriorityBanner from "../../src/components/PriorityBanner";
 import PageHeader from "../../src/components/PageHeader";
 import { PUBLIC_REPORT_STATUSES } from "../../src/constants/statusOptions";
 import {
@@ -86,6 +88,64 @@ function getUrgencyType(urgency) {
     default:
       return "neutral";
   }
+}
+
+function computePriority(incident, latestTriage) {
+  let score = 0;
+  const reasons = [];
+
+  if (latestTriage?.urgency === "Critical") {
+    score += 5;
+    reasons.push("critical triage urgency");
+  } else if (latestTriage?.urgency === "High") {
+    score += 4;
+    reasons.push("high triage urgency");
+  } else if (latestTriage?.urgency === "Moderate") {
+    score += 2;
+    reasons.push("moderate triage urgency");
+  }
+
+  if (Number(incident.victimCount) >= 5) {
+    score += 3;
+    reasons.push("multiple victims");
+  } else if (Number(incident.victimCount) >= 2) {
+    score += 2;
+    reasons.push("more than one victim");
+  } else {
+    score += 1;
+    reasons.push("single victim");
+  }
+
+  if (incident.mediaCount > 0) {
+    score += 1;
+    reasons.push("evidence available");
+  }
+
+  if (
+    incident.latitude !== null &&
+    incident.latitude !== undefined &&
+    incident.longitude !== null &&
+    incident.longitude !== undefined
+  ) {
+    score += 1;
+    reasons.push("location confirmed");
+  }
+
+  let level = "Low";
+
+  if (score >= 8) {
+    level = "Critical";
+  } else if (score >= 6) {
+    level = "High";
+  } else if (score >= 4) {
+    level = "Moderate";
+  }
+
+  return {
+    level,
+    score,
+    reason: `Priority based on ${reasons.join(", ")}.`,
+  };
 }
 
 export default function IncidentDetailsScreen() {
@@ -228,6 +288,20 @@ export default function IncidentDetailsScreen() {
 
   const latestTriage = incident.triageAssessments?.[0] || null;
 
+  const evidenceValue = incident.mediaCount > 0 ? "Available" : "None";
+  const evidenceType = incident.mediaCount > 0 ? "info" : "neutral";
+
+  const locationValue = hasCoordinates ? "Available" : "Missing";
+  const locationType = hasCoordinates ? "success" : "warning";
+
+  const triageValue = latestTriage?.urgency || "Not Assessed";
+  const triageType = latestTriage
+    ? getUrgencyType(latestTriage.urgency)
+    : "neutral";
+
+  const publicStatusType = getStatusType(selectedStatus);
+  const priority = computePriority(incident, latestTriage);
+
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
@@ -237,6 +311,39 @@ export default function IncidentDetailsScreen() {
           subtitle="Review the incident and choose the next action."
           icon="eye-outline"
         />
+
+        <FormSection title="Priority Overview">
+          <PriorityBanner
+            level={priority.level}
+            score={priority.score}
+            reason={priority.reason}
+          />
+        </FormSection>
+
+        <FormSection title="Quick Summary">
+          <View style={styles.summaryWrap}>
+            <SummaryPill
+              label="Public Status"
+              value={selectedStatus}
+              type={publicStatusType}
+            />
+            <SummaryPill
+              label="Triage"
+              value={triageValue}
+              type={triageType}
+            />
+            <SummaryPill
+              label="Evidence"
+              value={evidenceValue}
+              type={evidenceType}
+            />
+            <SummaryPill
+              label="Location"
+              value={locationValue}
+              type={locationType}
+            />
+          </View>
+        </FormSection>
 
         <FormSection title="Incident Summary">
           <InfoRow label="Incident ID" value={incident.id} />
@@ -469,6 +576,10 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: COLORS.background,
     flexGrow: 1,
+  },
+  summaryWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   emptyText: {
     fontSize: 14,

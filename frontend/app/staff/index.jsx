@@ -5,6 +5,7 @@ import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
 import StatCard from "../../src/components/StatCard";
 import AlertCard from "../../src/components/AlertCard";
+import ResourceAlertCard from "../../src/components/ResourceAlertCard";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import ProfileCard from "../../src/components/ProfileCard";
 import PageHeader from "../../src/components/PageHeader";
@@ -12,6 +13,45 @@ import { getDashboardOverviewService } from "../../src/services/dashboardService
 import { COLORS } from "../../src/constants/theme";
 
 const AUTO_REFRESH_INTERVAL = 15000;
+
+function getStatNavigationParams(label) {
+  if (label === "Critical Cases") {
+    return {
+      pathname: "/staff/incidents",
+      params: { priority: "Critical" },
+    };
+  }
+
+  if (label === "High Urgency Cases") {
+    return {
+      pathname: "/staff/incidents",
+      params: { priority: "High" },
+    };
+  }
+
+  if (label === "Reports Received Today") {
+    return {
+      pathname: "/staff/incidents",
+      params: { status: "Received" },
+    };
+  }
+
+  if (label === "Emergency Beds Available") {
+    return {
+      pathname: "/staff/resources",
+      params: { section: "beds" },
+    };
+  }
+
+  if (label === "Theatres Ready") {
+    return {
+      pathname: "/staff/resources",
+      params: { section: "theatre" },
+    };
+  }
+
+  return null;
+}
 
 export default function StaffHomeScreen() {
   const currentUser = {
@@ -24,6 +64,7 @@ export default function StaffHomeScreen() {
   const [dashboardData, setDashboardData] = useState({
     stats: [],
     alerts: [],
+    resourceAlerts: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -103,9 +144,21 @@ export default function StaffHomeScreen() {
           {isLoading ? (
             <Text style={styles.loadingText}>Loading dashboard stats...</Text>
           ) : dashboardData.stats.length > 0 ? (
-            dashboardData.stats.map((item) => (
-              <StatCard key={item.id} item={item} />
-            ))
+            dashboardData.stats.map((item) => {
+              const navigationTarget = getStatNavigationParams(item.label);
+
+              return (
+                <StatCard
+                  key={item.id}
+                  item={item}
+                  onPress={
+                    navigationTarget
+                      ? () => router.push(navigationTarget)
+                      : undefined
+                  }
+                />
+              );
+            })
           ) : (
             <Text style={styles.emptyText}>No dashboard stats available.</Text>
           )}
@@ -120,6 +173,18 @@ export default function StaffHomeScreen() {
             ))
           ) : (
             <Text style={styles.emptyText}>No active alerts right now.</Text>
+          )}
+        </FormSection>
+
+        <FormSection title="Resource Attention">
+          {isLoading ? (
+            <Text style={styles.loadingText}>Loading resource alerts...</Text>
+          ) : dashboardData.resourceAlerts.length > 0 ? (
+            dashboardData.resourceAlerts.map((item) => (
+              <ResourceAlertCard key={item.id} item={item} />
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No resource constraints right now.</Text>
           )}
         </FormSection>
 

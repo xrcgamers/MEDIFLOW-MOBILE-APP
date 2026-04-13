@@ -1,24 +1,25 @@
-import { Pressable, View, Text, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import StatusBadge from "./StatusBadge";
 import { COLORS, RADIUS, SHADOW, SPACING } from "../constants/theme";
 
-function getStatIcon(label) {
-  if (label.includes("Reports")) return "document-text-outline";
-  if (label.includes("Critical")) return "alert-circle-outline";
-  if (label.includes("High Urgency")) return "pulse-outline";
-  if (label.includes("Beds")) return "bed-outline";
-  if (label.includes("Theatres")) return "medkit-outline";
-  return "stats-chart-outline";
-}
+export default function ResourceAlertCard({ item }) {
+  const handlePress = () => {
+    if (!item.route) return;
 
-export default function StatCard({ item, onPress }) {
-  const content = (
-    <View style={styles.cardInner}>
+    router.push({
+      pathname: item.route,
+      params: item.params || {},
+    });
+  };
+
+  return (
+    <Pressable style={styles.card} onPress={handlePress}>
       <View style={styles.topRow}>
         <View style={styles.iconWrap}>
           <Ionicons
-            name={getStatIcon(item.label)}
+            name="warning-outline"
             size={18}
             color={COLORS.primaryDark}
           />
@@ -26,20 +27,11 @@ export default function StatCard({ item, onPress }) {
         <StatusBadge label={item.status.toUpperCase()} type={item.status} />
       </View>
 
-      <Text style={styles.label}>{item.label}</Text>
+      <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.value}>{item.value}</Text>
-    </View>
+      <Text style={styles.hint}>Tap to open related resource section</Text>
+    </Pressable>
   );
-
-  if (onPress) {
-    return (
-      <Pressable style={styles.card} onPress={onPress}>
-        {content}
-      </Pressable>
-    );
-  }
-
-  return <View style={styles.card}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -48,11 +40,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
+    padding: SPACING.md,
     marginBottom: SPACING.sm,
     ...SHADOW.card,
-  },
-  cardInner: {
-    padding: SPACING.md,
   },
   topRow: {
     flexDirection: "row",
@@ -68,15 +58,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  label: {
+  title: {
     fontSize: 14,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.xs,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 6,
   },
   value: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: "800",
     color: COLORS.text,
+    marginBottom: 6,
+  },
+  hint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
   },
 });

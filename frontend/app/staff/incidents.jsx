@@ -11,6 +11,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { INCIDENT_STATUS_FILTERS } from "../../src/constants/incidentFilters";
 import { INCIDENT_SORT_OPTIONS } from "../../src/constants/incidentSortOptions";
+import { INCIDENT_PRIORITY_FILTERS } from "../../src/constants/incidentPriorityFilters";
 import IncidentCard from "../../src/components/IncidentCard";
 import FormSelect from "../../src/components/FormSelect";
 import FormSection from "../../src/components/FormSection";
@@ -20,9 +21,29 @@ import PageHeader from "../../src/components/PageHeader";
 import { getIncidentsService } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
 import { COLORS, RADIUS } from "../../src/constants/theme";
+import { computeIncidentPriority } from "../../src/utils/priority";
 
 const AUTO_REFRESH_INTERVAL = 15000;
 const NEW_REPORT_BANNER_DURATION = 5000;
+
+function enrichIncident(item) {
+  const firstMedia = item.mediaAttachments?.[0];
+  const latestTriage = item.triageAssessments?.[0];
+  const priority = computeIncidentPriority(item, latestTriage);
+
+  return {
+    ...item,
+    incidentType: item.resolvedIncidentType || item.incidentType,
+    location: item.resolvedLocationText,
+    victims: item.victimCount,
+    reportedAt: new Date(item.createdAt).toLocaleString(),
+    mediaCount: item.mediaCount || 0,
+    evidenceImageUrl: firstMedia ? `${API_ROOT_URL}${firstMedia.filePath}` : null,
+    triageUrgency: latestTriage?.urgency || null,
+    priorityLevel: priority.level,
+    priorityScore: priority.score,
+  };
+}
 
 function sortIncidents(incidents, sortOption) {
   const sorted = [...incidents];
@@ -32,10 +53,29 @@ function sortIncidents(incidents, sortOption) {
       return sorted.sort(
         (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
       );
+
     case "Highest Victims":
       return sorted.sort((a, b) => b.victimCount - a.victimCount);
+
     case "Lowest Victims":
       return sorted.sort((a, b) => a.victimCount - b.victimCount);
+
+    case "Highest Priority":
+      return sorted.sort((a, b) => {
+        if ((b.priorityScore || 0) !== (a.priorityScore || 0)) {
+          return (b.priorityScore || 0) - (a.priorityScore || 0);
+        }
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+
+    case "Lowest Priority":
+      return sorted.sort((a, b) => {
+        if ((a.priorityScore || 0) !== (b.priorityScore || 0)) {
+          return (a.priorityScore || 0) - (b.priorityScore || 0);
+        }
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+
     case "Newest First":
     default:
       return sorted.sort(
@@ -47,10 +87,11 @@ function sortIncidents(incidents, sortOption) {
 export default function IncidentsScreen() {
   const params = useLocalSearchParams();
 
-  const [selectedFilter, setSelectedFilter] = useState(
-    params.status || "All"
-  );
+  const [selectedFilter, setSelectedFilter] = useState(params.status || "All");
   const [selectedSort, setSelectedSort] = useState("Newest First");
+  const [selectedPriority, setSelectedPriority] = useState(
+    params.priority || "All"
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [incidents, setIncidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,7 +118,6 @@ export default function IncidentsScreen() {
 
       if (previousCountRef.current > 0 && data.length > previousCountRef.current) {
         const difference = data.length - previousCountRef.current;
-
         setNewReportCount(difference);
         setShowNewReportBanner(true);
 
@@ -120,37 +160,44 @@ export default function IncidentsScreen() {
   const filteredIncidents = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    const filtered = incidents.filter((incident) => {
-      const matchesFilter =
-        selectedFilter === "All" || incident.status === selectedFilter;
+    const filtered = incidents
+      .map(enrichIncident)
+      .filter((incident) => {
+        const matchesFilter =
+          selectedFilter === "All" || incident.status === selectedFilter;
 
-      const latestTriage = incident.triageAssessments?.[0];
-      const matchesTriageUrgency =
-        !activeTriageUrgencyFilter ||
-        latestTriage?.urgency === activeTriageUrgencyFilter;
+        const matchesPriority =
+          selectedPriority === "All" ||
+          incident.priorityLevel === selectedPriority;
 
-      const incidentType = (
-        incident.resolvedIncidentType ||
-        incident.incidentType ||
-        ""
-      ).toLowerCase();
-      const location = (incident.resolvedLocationText || "").toLowerCase();
-      const trackingCode = (incident.trackingCode || "").toLowerCase();
+        const matchesTriageUrgency =
+          !activeTriageUrgencyFilter ||
+          incident.triageUrgency === activeTriageUrgencyFilter;
 
-      const matchesSearch =
-        !normalizedQuery ||
-        trackingCode.includes(normalizedQuery) ||
-        incidentType.includes(normalizedQuery) ||
-        location.includes(normalizedQuery);
+        const incidentType = (incident.incidentType || "").toLowerCase();
+        const location = (incident.location || "").toLowerCase();
+        const trackingCode = (incident.trackingCode || "").toLowerCase();
 
-      return matchesFilter && matchesSearch && matchesTriageUrgency;
-    });
+        const matchesSearch =
+          !normalizedQuery ||
+          trackingCode.includes(normalizedQuery) ||
+          incidentType.includes(normalizedQuery) ||
+          location.includes(normalizedQuery);
+
+        return (
+          matchesFilter &&
+          matchesPriority &&
+          matchesSearch &&
+          matchesTriageUrgency
+        );
+      });
 
     return sortIncidents(filtered, selectedSort);
   }, [
     incidents,
     selectedFilter,
     selectedSort,
+    selectedPriority,
     searchQuery,
     activeTriageUrgencyFilter,
   ]);
@@ -164,25 +211,10 @@ export default function IncidentsScreen() {
 
   const handleClearFilters = () => {
     setSelectedFilter("All");
+    setSelectedPriority("All");
     setActiveTriageUrgencyFilter("");
     setSearchQuery("");
   };
-
-  const listData = filteredIncidents.map((item) => {
-    const firstMedia = item.mediaAttachments?.[0];
-    const latestTriage = item.triageAssessments?.[0];
-
-    return {
-      ...item,
-      incidentType: item.resolvedIncidentType || item.incidentType,
-      location: item.resolvedLocationText,
-      victims: item.victimCount,
-      reportedAt: new Date(item.createdAt).toLocaleString(),
-      mediaCount: item.mediaCount || 0,
-      evidenceImageUrl: firstMedia ? `${API_ROOT_URL}${firstMedia.filePath}` : null,
-      triageUrgency: latestTriage?.urgency || null,
-    };
-  });
 
   const bannerLabel =
     newReportCount === 1
@@ -190,7 +222,10 @@ export default function IncidentsScreen() {
       : `${newReportCount} new reports received`;
 
   const hasActiveRouteFilters =
-    selectedFilter !== "All" || !!activeTriageUrgencyFilter;
+    selectedFilter !== "All" ||
+    selectedPriority !== "All" ||
+    !!activeTriageUrgencyFilter ||
+    !!searchQuery;
 
   return (
     <>
@@ -245,6 +280,14 @@ export default function IncidentsScreen() {
           />
 
           <FormSelect
+            label="Priority Filter"
+            selectedValue={selectedPriority}
+            onValueChange={setSelectedPriority}
+            options={INCIDENT_PRIORITY_FILTERS}
+            placeholder="Select priority"
+          />
+
+          <FormSelect
             label="Sort By"
             selectedValue={selectedSort}
             onValueChange={setSelectedSort}
@@ -271,7 +314,7 @@ export default function IncidentsScreen() {
           </View>
         ) : (
           <FlatList
-            data={listData}
+            data={filteredIncidents}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <IncidentCard incident={item} onViewDetails={handleViewDetails} />
