@@ -9,6 +9,7 @@ import FormSection from "../src/components/FormSection";
 import TimelineItem from "../src/components/TimelineItem";
 import StatusBadge from "../src/components/StatusBadge";
 import PageHeader from "../src/components/PageHeader";
+import BackNavButton from "../src/components/BackNavButton";
 import { COLORS, RADIUS } from "../src/constants/theme";
 
 function getTrackingStatusType(status) {
@@ -70,6 +71,8 @@ export default function TrackScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BackNavButton label="Back to Home" fallbackRoute="/" />
+
       <PageHeader
         eyebrow="Public Tracking"
         title="Track Report"

@@ -7,6 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model StaffUser {
+  id           String            @id @default(cuid())
+  name         String
+  email        String            @unique
+  staffId      String            @unique
+  role         String
+  passwordHash String
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  reportLogs   StaffActionLog[]
+  resourceLogs ResourceActionLog[]
+}
+
 model Report {
   id                   String                @id @default(cuid())
   trackingCode         String                @unique
@@ -35,12 +50,12 @@ model Report {
 }
 
 model ReportStatusHistory {
-  id         String   @id @default(cuid())
-  reportId    String
-  label       String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  reportId   String
+  label      String
+  createdAt  DateTime @default(now())
 
-  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 model TriageAssessment {
@@ -61,13 +76,15 @@ model TriageAssessment {
 }
 
 model ResourceItem {
-  id        String   @id @default(cuid())
-  category  String
-  label     String
-  value     String
-  status    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String              @id @default(cuid())
+  category    String
+  label       String
+  value       String
+  status      String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  actionLogs  ResourceActionLog[]
 }
 
 model MediaAttachment {
@@ -83,13 +100,28 @@ model MediaAttachment {
 }
 
 model StaffActionLog {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   reportId     String
   actionType   String
   status       String?
   note         String?
   actorName    String?
-  createdAt    DateTime @default(now())
+  actorUserId  String?
+  createdAt    DateTime  @default(now())
 
-  report       Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report       Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actorUser    StaffUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+model ResourceActionLog {
+  id          String     @id @default(cuid())
+  resourceId   String
+  actionType   String
+  note         String?
+  actorName    String?
+  actorUserId  String?
+  createdAt    DateTime  @default(now())
+
+  resource     ResourceItem @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  actorUser    StaffUser?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 }

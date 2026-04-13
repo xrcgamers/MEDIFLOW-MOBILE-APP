@@ -93,7 +93,8 @@ exports.assessTriage = async (req, res) => {
           actionType: "TRIAGE_ASSESSMENT",
           status: result.urgency,
           note: result.advisory,
-          actorName: "Staff User",
+          actorName: req.user.name,
+          actorUserId: req.user.id,
         },
       });
     }

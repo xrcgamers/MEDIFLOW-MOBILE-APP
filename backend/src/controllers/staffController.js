@@ -79,7 +79,7 @@ exports.getIncidentById = async (req, res) => {
 exports.updateIncidentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, note = "", actorName = "Staff User" } = req.body;
+    const { status, note = "" } = req.body;
 
     if (!status) {
       return res.status(400).json({
@@ -117,7 +117,8 @@ exports.updateIncidentStatus = async (req, res) => {
               actionType: "STATUS_UPDATE",
               status,
               note,
-              actorName,
+              actorName: req.user.name,
+              actorUserId: req.user.id,
             },
           ],
         },

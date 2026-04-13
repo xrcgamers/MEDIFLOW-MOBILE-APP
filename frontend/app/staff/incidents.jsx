@@ -18,9 +18,10 @@ import FormSection from "../../src/components/FormSection";
 import FormInput from "../../src/components/FormInput";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
+import BackNavButton from "../../src/components/BackNavButton";
 import { getIncidentsService } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
-import { COLORS, RADIUS } from "../../src/constants/theme";
+import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
 import { computeIncidentPriority } from "../../src/utils/priority";
 
 const AUTO_REFRESH_INTERVAL = 15000;
@@ -216,6 +217,18 @@ export default function IncidentsScreen() {
     setSearchQuery("");
   };
 
+  const handleGoToHome = () => {
+    router.push("/staff");
+  };
+
+  const handleGoToTriage = () => {
+    router.push("/staff/triage");
+  };
+
+  const handleGoToResources = () => {
+    router.push("/staff/resources");
+  };
+
   const bannerLabel =
     newReportCount === 1
       ? "1 new report received"
@@ -230,104 +243,136 @@ export default function IncidentsScreen() {
   return (
     <>
       <View style={styles.container}>
-        <PageHeader
-          eyebrow="Incident Review"
-          title="Incoming Reports"
-          subtitle="Review newly submitted public emergency reports."
-          icon="document-text-outline"
-        />
-
-        {activeTriageUrgencyFilter ? (
-          <View style={styles.filterBanner}>
-            <Ionicons
-              name="funnel-outline"
-              size={18}
-              color={COLORS.primaryDark}
-              style={styles.bannerIcon}
+        <FlatList
+          data={isLoading ? [] : filteredIncidents}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <IncidentCard incident={item} onViewDetails={handleViewDetails} />
+          )}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => loadIncidents(true)}
             />
-            <Text style={styles.filterBannerText}>
-              Filtered to triage urgency: {activeTriageUrgencyFilter}
-            </Text>
-          </View>
-        ) : null}
+          }
+          ListHeaderComponent={
+            <>
+              <BackNavButton label="Back to Staff Home" fallbackRoute="/staff" />
 
-        {showNewReportBanner ? (
-          <View style={styles.banner}>
-            <Ionicons
-              name="notifications"
-              size={18}
-              color={COLORS.primaryDark}
-              style={styles.bannerIcon}
-            />
-            <Text style={styles.bannerText}>{bannerLabel}</Text>
-          </View>
-        ) : null}
-
-        <FormSection title="Find Reports">
-          <FormInput
-            label="Search"
-            placeholder="Search by tracking code, type, or location"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-
-          <FormSelect
-            label="Status Filter"
-            selectedValue={selectedFilter}
-            onValueChange={setSelectedFilter}
-            options={INCIDENT_STATUS_FILTERS}
-            placeholder="Select status"
-          />
-
-          <FormSelect
-            label="Priority Filter"
-            selectedValue={selectedPriority}
-            onValueChange={setSelectedPriority}
-            options={INCIDENT_PRIORITY_FILTERS}
-            placeholder="Select priority"
-          />
-
-          <FormSelect
-            label="Sort By"
-            selectedValue={selectedSort}
-            onValueChange={setSelectedSort}
-            options={INCIDENT_SORT_OPTIONS}
-            placeholder="Select sort option"
-          />
-
-          {hasActiveRouteFilters ? (
-            <Pressable style={styles.clearButton} onPress={handleClearFilters}>
-              <Ionicons
-                name="close-circle-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.clearIcon}
+              <PageHeader
+                eyebrow="Incident Review"
+                title="Incoming Reports"
+                subtitle="Review newly submitted public emergency reports."
+                icon="document-text-outline"
               />
-              <Text style={styles.clearText}>Clear active filters</Text>
-            </Pressable>
-          ) : null}
-        </FormSection>
 
-        {isLoading ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Loading reports...</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={filteredIncidents}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <IncidentCard incident={item} onViewDetails={handleViewDetails} />
-            )}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={() => loadIncidents(true)}
-              />
-            }
-            ListHeaderComponent={
+              <FormSection title="Quick Navigation">
+                <View style={styles.quickNavWrap}>
+                  <Pressable style={styles.quickNavButton} onPress={handleGoToHome}>
+                    <Ionicons
+                      name="home-outline"
+                      size={18}
+                      color={COLORS.primaryDark}
+                      style={styles.quickNavIcon}
+                    />
+                    <Text style={styles.quickNavText}>Staff Home</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.quickNavButton} onPress={handleGoToTriage}>
+                    <Ionicons
+                      name="pulse-outline"
+                      size={18}
+                      color={COLORS.primaryDark}
+                      style={styles.quickNavIcon}
+                    />
+                    <Text style={styles.quickNavText}>Open Triage</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
+                    <Ionicons
+                      name="layers-outline"
+                      size={18}
+                      color={COLORS.primaryDark}
+                      style={styles.quickNavIcon}
+                    />
+                    <Text style={styles.quickNavText}>Resources</Text>
+                  </Pressable>
+                </View>
+              </FormSection>
+
+              {activeTriageUrgencyFilter ? (
+                <View style={styles.filterBanner}>
+                  <Ionicons
+                    name="funnel-outline"
+                    size={18}
+                    color={COLORS.primaryDark}
+                    style={styles.bannerIcon}
+                  />
+                  <Text style={styles.filterBannerText}>
+                    Filtered to triage urgency: {activeTriageUrgencyFilter}
+                  </Text>
+                </View>
+              ) : null}
+
+              {showNewReportBanner ? (
+                <View style={styles.banner}>
+                  <Ionicons
+                    name="notifications"
+                    size={18}
+                    color={COLORS.primaryDark}
+                    style={styles.bannerIcon}
+                  />
+                  <Text style={styles.bannerText}>{bannerLabel}</Text>
+                </View>
+              ) : null}
+
+              <FormSection title="Find Reports">
+                <FormInput
+                  label="Search"
+                  placeholder="Search by tracking code, type, or location"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+
+                <FormSelect
+                  label="Status Filter"
+                  selectedValue={selectedFilter}
+                  onValueChange={setSelectedFilter}
+                  options={INCIDENT_STATUS_FILTERS}
+                  placeholder="Select status"
+                />
+
+                <FormSelect
+                  label="Priority Filter"
+                  selectedValue={selectedPriority}
+                  onValueChange={setSelectedPriority}
+                  options={INCIDENT_PRIORITY_FILTERS}
+                  placeholder="Select priority"
+                />
+
+                <FormSelect
+                  label="Sort By"
+                  selectedValue={selectedSort}
+                  onValueChange={setSelectedSort}
+                  options={INCIDENT_SORT_OPTIONS}
+                  placeholder="Select sort option"
+                />
+
+                {hasActiveRouteFilters ? (
+                  <Pressable style={styles.clearButton} onPress={handleClearFilters}>
+                    <Ionicons
+                      name="close-circle-outline"
+                      size={18}
+                      color={COLORS.primaryDark}
+                      style={styles.clearIcon}
+                    />
+                    <Text style={styles.clearText}>Clear active filters</Text>
+                  </Pressable>
+                ) : null}
+              </FormSection>
+
               <View style={styles.headerInfo}>
                 <Text style={styles.refreshHint}>
                   Auto-refreshes every 15 seconds
@@ -343,16 +388,24 @@ export default function IncidentsScreen() {
                     : "Not yet loaded"}
                 </Text>
               </View>
-            }
-            ListEmptyComponent={
+
+              {isLoading ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>Loading reports...</Text>
+                </View>
+              ) : null}
+            </>
+          }
+          ListEmptyComponent={
+            !isLoading ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>
                   No reports found for the current search or filter.
                 </Text>
               </View>
-            }
-          />
-        )}
+            ) : null
+          }
+        />
       </View>
 
       <StaffNavBar activeRoute="/staff/incidents" />
@@ -369,6 +422,30 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+  quickNavWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  quickNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickNavIcon: {
+    marginRight: 6,
+  },
+  quickNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   headerInfo: {
     marginBottom: 10,

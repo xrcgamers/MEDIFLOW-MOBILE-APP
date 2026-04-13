@@ -24,7 +24,7 @@ export default function HomeScreen() {
         <HomeActionCard
           title="Report Emergency"
           description="Submit a new emergency report. Your device location is captured automatically when reporting begins."
-          buttonTitle="Start Report"
+          buttonTitle="Report Emergency"
           onPress={() => router.push("/report")}
           icon="warning-outline"
         />
@@ -41,7 +41,7 @@ export default function HomeScreen() {
         <HomeActionCard
           title="Staff Access"
           description="Authorized hospital staff can log in to review incidents, perform triage, and monitor operational resources."
-          buttonTitle="Staff Login"
+          buttonTitle="Login"
           onPress={() => router.push("/auth/login")}
           variant="secondary"
           icon="shield-checkmark-outline"

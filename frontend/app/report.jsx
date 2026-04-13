@@ -11,6 +11,7 @@ import AppButton from "../src/components/AppButton";
 import FormSelect from "../src/components/FormSelect";
 import FormSection from "../src/components/FormSection";
 import PageHeader from "../src/components/PageHeader";
+import BackNavButton from "../src/components/BackNavButton";
 import { COLORS, RADIUS } from "../src/constants/theme";
 
 export default function ReportScreen() {
@@ -142,6 +143,8 @@ export default function ReportScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <BackNavButton label="Back to Home" fallbackRoute="/" />
+
       <PageHeader
         eyebrow="Public Reporting"
         title="Report Emergency"

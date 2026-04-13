@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, StyleSheet, RefreshControl } from "react-native";
+import {
+  ScrollView,
+  Text,
+  StyleSheet,
+  RefreshControl,
+  View,
+  Pressable,
+} from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
 import StatCard from "../../src/components/StatCard";
@@ -10,7 +18,8 @@ import StaffNavBar from "../../src/components/StaffNavBar";
 import ProfileCard from "../../src/components/ProfileCard";
 import PageHeader from "../../src/components/PageHeader";
 import { getDashboardOverviewService } from "../../src/services/dashboardService";
-import { COLORS } from "../../src/constants/theme";
+import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
+import { useAuth } from "../../src/context/AuthContext";
 
 const AUTO_REFRESH_INTERVAL = 15000;
 
@@ -54,12 +63,7 @@ function getStatNavigationParams(label) {
 }
 
 export default function StaffHomeScreen() {
-  const currentUser = {
-    id: "staff-001",
-    name: "Triage Nurse",
-    role: "Staff",
-    identifier: "staff001@mediflow.ug",
-  };
+  const { user, logout } = useAuth();
 
   const [dashboardData, setDashboardData] = useState({
     stats: [],
@@ -99,6 +103,23 @@ export default function StaffHomeScreen() {
     return () => clearInterval(intervalId);
   }, []);
 
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/auth/login");
+  };
+
+  const handleGoToIncidents = () => {
+    router.push("/staff/incidents");
+  };
+
+  const handleGoToTriage = () => {
+    router.push("/staff/triage");
+  };
+
+  const handleGoToResources = () => {
+    router.push("/staff/resources");
+  };
+
   return (
     <>
       <ScrollView
@@ -117,6 +138,40 @@ export default function StaffHomeScreen() {
           icon="speedometer-outline"
         />
 
+        <FormSection title="Quick Navigation">
+          <View style={styles.quickNavWrap}>
+            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
+              <Ionicons
+                name="list-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Reports List</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToTriage}>
+              <Ionicons
+                name="pulse-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Open Triage</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
+              <Ionicons
+                name="layers-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Resources</Text>
+            </Pressable>
+          </View>
+        </FormSection>
+
         <Text style={styles.refreshHint}>
           Auto-refreshes every 15 seconds
         </Text>
@@ -132,10 +187,19 @@ export default function StaffHomeScreen() {
         </Text>
 
         <FormSection title="Your Session">
-          <ProfileCard user={currentUser} />
+          <ProfileCard
+            user={{
+              id: user?.id,
+              name: user?.name,
+              role: user?.role,
+              email: user?.email,
+              staffId: user?.staffId,
+              identifier: user?.email || user?.staffId,
+            }}
+          />
           <AppButton
             title="Logout"
-            onPress={() => router.replace("/auth/login")}
+            onPress={handleLogout}
             variant="secondary"
           />
         </FormSection>
@@ -191,16 +255,16 @@ export default function StaffHomeScreen() {
         <FormSection title="Operations">
           <AppButton
             title="View Incoming Reports"
-            onPress={() => router.push("/staff/incidents")}
+            onPress={handleGoToIncidents}
           />
           <AppButton
             title="Open Triage"
-            onPress={() => router.push("/staff/triage")}
+            onPress={handleGoToTriage}
             variant="secondary"
           />
           <AppButton
             title="View Resources"
-            onPress={() => router.push("/staff/resources")}
+            onPress={handleGoToResources}
             variant="secondary"
           />
         </FormSection>
@@ -217,6 +281,30 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     backgroundColor: COLORS.background,
     flexGrow: 1,
+  },
+  quickNavWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  quickNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickNavIcon: {
+    marginRight: 6,
+  },
+  quickNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   loadingText: {
     fontSize: 14,

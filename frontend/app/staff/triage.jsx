@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { Text, StyleSheet, View, Alert } from "react-native";
+import { Text, StyleSheet, View, Alert, Pressable, ScrollView } from "react-native";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import FormInput from "../../src/components/FormInput";
 import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
@@ -8,8 +10,9 @@ import FormSwitch from "../../src/components/FormSwitch";
 import StatusBadge from "../../src/components/StatusBadge";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
+import BackNavButton from "../../src/components/BackNavButton";
 import { getTriageAssessment } from "../../src/services/triageService";
-import { COLORS } from "../../src/constants/theme";
+import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
 
 function getUrgencyType(urgency) {
   switch (urgency) {
@@ -68,9 +71,38 @@ export default function TriageScreen() {
     }
   };
 
+  const handleGoToHome = () => {
+    router.push("/staff");
+  };
+
+  const handleGoToIncidents = () => {
+    router.push("/staff/incidents");
+  };
+
+  const handleGoToResources = () => {
+    router.push("/staff/resources");
+  };
+
+  const handleBackToIncident = () => {
+    if (linkedReportId) {
+      router.push({
+        pathname: "/staff/incident-details",
+        params: { id: linkedReportId },
+      });
+      return;
+    }
+
+    router.push("/staff/incidents");
+  };
+
   return (
     <>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <BackNavButton
+          label={linkedReportId ? "Back to Incident" : "Back to Reports"}
+          fallbackRoute={linkedReportId ? "/staff/incidents" : "/staff/incidents"}
+        />
+
         <PageHeader
           eyebrow="Clinical Decision Support"
           title="Triage Support"
@@ -81,6 +113,52 @@ export default function TriageScreen() {
           }
           icon="pulse-outline"
         />
+
+        <FormSection title="Quick Navigation">
+          <View style={styles.quickNavWrap}>
+            <Pressable style={styles.quickNavButton} onPress={handleGoToHome}>
+              <Ionicons
+                name="home-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Staff Home</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
+              <Ionicons
+                name="list-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Reports List</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
+              <Ionicons
+                name="layers-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Resources</Text>
+            </Pressable>
+
+            {linkedReportId ? (
+              <Pressable style={styles.quickNavButton} onPress={handleBackToIncident}>
+                <Ionicons
+                  name="document-text-outline"
+                  size={18}
+                  color={COLORS.primaryDark}
+                  style={styles.quickNavIcon}
+                />
+                <Text style={styles.quickNavText}>Incident Details</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </FormSection>
 
         {linkedTrackingCode ? (
           <FormSection title="Linked Incident">
@@ -153,7 +231,7 @@ export default function TriageScreen() {
             )}
           </FormSection>
         ) : null}
-      </View>
+      </ScrollView>
 
       <StaffNavBar activeRoute="/staff/triage" />
     </>
@@ -162,10 +240,34 @@ export default function TriageScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     paddingBottom: 110,
     backgroundColor: COLORS.background,
+  },
+  quickNavWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  quickNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickNavIcon: {
+    marginRight: 6,
+  },
+  quickNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   linkedText: {
     fontSize: 14,

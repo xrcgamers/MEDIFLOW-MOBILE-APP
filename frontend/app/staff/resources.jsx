@@ -5,15 +5,18 @@ import {
   StyleSheet,
   RefreshControl,
   View,
+  Pressable,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import FormSection from "../../src/components/FormSection";
 import ResourceCard from "../../src/components/ResourceCard";
 import ResourceSummaryCard from "../../src/components/ResourceSummaryCard";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
+import BackNavButton from "../../src/components/BackNavButton";
 import { getResourcesService } from "../../src/services/resourceService";
-import { COLORS, RADIUS } from "../../src/constants/theme";
+import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
 
 function SectionHighlightBanner({ label }) {
   return (
@@ -145,6 +148,18 @@ export default function ResourcesScreen() {
   const activeSectionLabel = sectionLabels[activeSection] || "";
   const summaryData = useMemo(() => getSummaryData(resources), [resources]);
 
+  const handleGoToHome = () => {
+    router.push("/staff");
+  };
+
+  const handleGoToIncidents = () => {
+    router.push("/staff/incidents");
+  };
+
+  const handleGoToTriage = () => {
+    router.push("/staff/triage");
+  };
+
   return (
     <>
       <ScrollView
@@ -156,12 +171,48 @@ export default function ResourcesScreen() {
           />
         }
       >
+        <BackNavButton label="Back to Staff Home" fallbackRoute="/staff" />
+
         <PageHeader
           eyebrow="Operational Readiness"
           title="Resources Board"
           subtitle="View current operational resource indicators."
           icon="layers-outline"
         />
+
+        <FormSection title="Quick Navigation">
+          <View style={styles.quickNavWrap}>
+            <Pressable style={styles.quickNavButton} onPress={handleGoToHome}>
+              <Ionicons
+                name="home-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Staff Home</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
+              <Ionicons
+                name="list-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Reports List</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToTriage}>
+              <Ionicons
+                name="pulse-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Open Triage</Text>
+            </Pressable>
+          </View>
+        </FormSection>
 
         {activeSectionLabel ? (
           <SectionHighlightBanner label={activeSectionLabel} />
@@ -188,7 +239,11 @@ export default function ResourcesScreen() {
             <View style={activeSection === "beds" ? styles.sectionFocus : null}>
               <FormSection title="Bed Availability">
                 {resources.beds.map((item) => (
-                  <ResourceCard key={item.id} item={item} />
+                  <ResourceCard
+                    key={item.id}
+                    item={item}
+                    onActionComplete={loadResources}
+                  />
                 ))}
               </FormSection>
             </View>
@@ -196,7 +251,11 @@ export default function ResourcesScreen() {
             <View style={activeSection === "theatre" ? styles.sectionFocus : null}>
               <FormSection title="Theatre Readiness">
                 {resources.theatre.map((item) => (
-                  <ResourceCard key={item.id} item={item} />
+                  <ResourceCard
+                    key={item.id}
+                    item={item}
+                    onActionComplete={loadResources}
+                  />
                 ))}
               </FormSection>
             </View>
@@ -204,7 +263,11 @@ export default function ResourcesScreen() {
             <View style={activeSection === "blood" ? styles.sectionFocus : null}>
               <FormSection title="Blood Status">
                 {resources.blood.map((item) => (
-                  <ResourceCard key={item.id} item={item} />
+                  <ResourceCard
+                    key={item.id}
+                    item={item}
+                    onActionComplete={loadResources}
+                  />
                 ))}
               </FormSection>
             </View>
@@ -212,7 +275,11 @@ export default function ResourcesScreen() {
             <View style={activeSection === "staff" ? styles.sectionFocus : null}>
               <FormSection title="Staff Coverage">
                 {resources.staff.map((item) => (
-                  <ResourceCard key={item.id} item={item} />
+                  <ResourceCard
+                    key={item.id}
+                    item={item}
+                    onActionComplete={loadResources}
+                  />
                 ))}
               </FormSection>
             </View>
@@ -231,6 +298,30 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     backgroundColor: COLORS.background,
     flexGrow: 1,
+  },
+  quickNavWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  quickNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickNavIcon: {
+    marginRight: 6,
+  },
+  quickNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   loadingText: {
     fontSize: 14,

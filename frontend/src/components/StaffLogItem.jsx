@@ -38,12 +38,11 @@ export default function StaffLogItem({ item }) {
       </View>
 
       <Text style={styles.meta}>
-        By: {item.actorName || "Staff User"}
+        By: {item.actorName || "Authenticated Staff User"}
       </Text>
 
       <Text style={styles.meta}>
-        At:{" "}
-        {new Date(item.createdAt).toLocaleString()}
+        At: {new Date(item.createdAt).toLocaleString()}
       </Text>
 
       {item.note ? <Text style={styles.note}>{item.note}</Text> : null}

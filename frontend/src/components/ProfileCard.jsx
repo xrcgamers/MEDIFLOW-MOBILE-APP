@@ -1,35 +1,51 @@
 import { View, Text, StyleSheet } from "react-native";
-import StatusBadge from "./StatusBadge";
+import { Ionicons } from "@expo/vector-icons";
+import { COLORS, RADIUS, SHADOW, SPACING } from "../constants/theme";
 
 export default function ProfileCard({ user }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.name}>{user.name}</Text>
-      <Text style={styles.meta}>Role: {user.role}</Text>
-      <Text style={styles.meta}>Identifier: {user.identifier}</Text>
-      <StatusBadge label="ACTIVE SESSION" type="success" />
+      <View style={styles.iconWrap}>
+        <Ionicons name="person-circle-outline" size={42} color={COLORS.primaryDark} />
+      </View>
+
+      <Text style={styles.name}>{user?.name || "Staff User"}</Text>
+      <Text style={styles.role}>{user?.role || "Staff"}</Text>
+      <Text style={styles.meta}>{user?.email || user?.identifier || "No identifier"}</Text>
+      {user?.staffId ? <Text style={styles.meta}>Staff ID: {user.staffId}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    alignItems: "center",
+    ...SHADOW.card,
+  },
+  iconWrap: {
+    marginBottom: SPACING.sm,
   },
   name: {
     fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  role: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
+    color: COLORS.primaryDark,
+    marginBottom: 6,
   },
   meta: {
-    fontSize: 14,
-    color: "#374151",
-    marginBottom: 6,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 2,
   },
 });

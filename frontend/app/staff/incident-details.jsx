@@ -24,6 +24,7 @@ import QuickStatusAction from "../../src/components/QuickStatusAction";
 import SummaryPill from "../../src/components/SummaryPill";
 import PriorityBanner from "../../src/components/PriorityBanner";
 import PageHeader from "../../src/components/PageHeader";
+import BackNavButton from "../../src/components/BackNavButton";
 import { PUBLIC_REPORT_STATUSES } from "../../src/constants/statusOptions";
 import {
   getIncidentByIdService,
@@ -195,7 +196,6 @@ export default function IncidentDetailsScreen() {
       const updated = await updateIncidentStatusService(incident.id, {
         status: selectedStatus,
         note: staffNote,
-        actorName: "Triage Nurse",
       });
 
       setIncident(updated);
@@ -217,6 +217,18 @@ export default function IncidentDetailsScreen() {
         trackingCode: incident.trackingCode,
       },
     });
+  };
+
+  const handleGoToIncidents = () => {
+    router.push("/staff/incidents");
+  };
+
+  const handleGoToResources = () => {
+    router.push("/staff/resources");
+  };
+
+  const handleGoToDashboard = () => {
+    router.push("/staff");
   };
 
   const openPreview = (url) => {
@@ -257,6 +269,7 @@ export default function IncidentDetailsScreen() {
   if (isLoading) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
+        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
         <PageHeader
           eyebrow="Incident Review"
           title="Incident Details"
@@ -270,6 +283,7 @@ export default function IncidentDetailsScreen() {
   if (!incident) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
+        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
         <PageHeader
           eyebrow="Incident Review"
           title="Incident Details"
@@ -305,12 +319,58 @@ export default function IncidentDetailsScreen() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.container}>
+        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
+
         <PageHeader
           eyebrow="Incident Review"
           title="Incident Details"
           subtitle="Review the incident and choose the next action."
           icon="eye-outline"
         />
+
+        <FormSection title="Quick Navigation">
+          <View style={styles.quickNavWrap}>
+            <Pressable style={styles.quickNavButton} onPress={handleGoToDashboard}>
+              <Ionicons
+                name="home-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Staff Home</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
+              <Ionicons
+                name="list-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Reports List</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleProceedToTriage}>
+              <Ionicons
+                name="pulse-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Open Triage</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
+              <Ionicons
+                name="layers-outline"
+                size={18}
+                color={COLORS.primaryDark}
+                style={styles.quickNavIcon}
+              />
+              <Text style={styles.quickNavText}>Resources</Text>
+            </Pressable>
+          </View>
+        </FormSection>
 
         <FormSection title="Priority Overview">
           <PriorityBanner
@@ -576,6 +636,30 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: COLORS.background,
     flexGrow: 1,
+  },
+  quickNavWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  quickNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickNavIcon: {
+    marginRight: 6,
+  },
+  quickNavText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   summaryWrap: {
     flexDirection: "row",

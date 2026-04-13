@@ -1,18 +1,31 @@
-export async function loginStaffService({ identifier, password }) {
-  const cleanedIdentifier = identifier.trim();
-  const cleanedPassword = password.trim();
+import apiClient from "../api/client";
+import {
+  saveAuthSession,
+  getStoredUser,
+  clearAuthSession,
+} from "./tokenStorage";
 
-  if (!cleanedIdentifier || !cleanedPassword) {
-    throw new Error("Identifier and password are required.");
-  }
-
-  return Promise.resolve({
-    user: {
-      id: "staff-001",
-      name: "Triage Nurse",
-      role: "Staff",
-      identifier: cleanedIdentifier,
-    },
-    token: "mock-jwt-token",
+export async function loginStaffService(form) {
+  const response = await apiClient.post("/auth/login", {
+    identifier: form.identifier.trim(),
+    password: form.password,
   });
+
+  const { token, user } = response.data.data;
+  await saveAuthSession(token, user);
+
+  return { token, user };
+}
+
+export async function getCurrentStaffService() {
+  const response = await apiClient.get("/auth/me");
+  return response.data.data;
+}
+
+export async function getCachedStaffUserService() {
+  return getStoredUser();
+}
+
+export async function logoutStaffService() {
+  await clearAuthSession();
 }
