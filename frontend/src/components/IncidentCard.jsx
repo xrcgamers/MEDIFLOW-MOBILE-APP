@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import AppButton from "./AppButton";
 import StatusBadge from "./StatusBadge";
+import { COLORS, RADIUS, SPACING, SHADOW } from "../constants/theme";
 
 function getStatusType(status) {
   switch (status) {
@@ -20,13 +21,26 @@ function getStatusType(status) {
 export default function IncidentCard({ incident, onViewDetails }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{incident.incidentType}</Text>
-      <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
+      <View style={styles.topRow}>
+        <Text style={styles.title}>{incident.incidentType}</Text>
+        <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
+      </View>
+
+      {incident.evidenceImageUrl ? (
+        <Image source={{ uri: incident.evidenceImageUrl }} style={styles.thumbnail} />
+      ) : (
+        <View style={styles.noImageBox}>
+          <Text style={styles.noImageText}>No evidence photo</Text>
+        </View>
+      )}
 
       <Text style={styles.meta}>Tracking Code: {incident.trackingCode}</Text>
       <Text style={styles.meta}>Location: {incident.location}</Text>
       <Text style={styles.meta}>Victims: {incident.victims}</Text>
       <Text style={styles.meta}>Reported At: {incident.reportedAt}</Text>
+      <Text style={styles.meta}>
+        Evidence: {incident.mediaCount > 0 ? `${incident.mediaCount} file(s)` : "None"}
+      </Text>
 
       <AppButton
         title="View Details"
@@ -39,23 +53,48 @@ export default function IncidentCard({ incident, onViewDetails }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    ...SHADOW.card,
+  },
+  topRow: {
+    marginBottom: SPACING.sm,
   },
   title: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 6,
-    color: "#111827",
+    color: COLORS.text,
+  },
+  thumbnail: {
+    width: "100%",
+    height: 160,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+  },
+  noImageBox: {
+    height: 70,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.sm,
+  },
+  noImageText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: "600",
   },
   meta: {
     fontSize: 14,
     color: "#374151",
     marginBottom: 6,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

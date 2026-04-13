@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, StyleSheet } from "react-native";
+import { ScrollView, Text, StyleSheet, RefreshControl } from "react-native";
 import { router } from "expo-router";
 import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
@@ -10,6 +10,8 @@ import ProfileCard from "../../src/components/ProfileCard";
 import PageHeader from "../../src/components/PageHeader";
 import { getDashboardOverviewService } from "../../src/services/dashboardService";
 import { COLORS } from "../../src/constants/theme";
+
+const AUTO_REFRESH_INTERVAL = 15000;
 
 export default function StaffHomeScreen() {
   const currentUser = {
@@ -24,26 +26,47 @@ export default function StaffHomeScreen() {
     alerts: [],
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadDashboard = async (isPullRefresh = false) => {
+    try {
+      if (isPullRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading((prev) => (dashboardData.stats.length === 0 ? true : prev));
+      }
+
+      const data = await getDashboardOverviewService();
+      setDashboardData(data);
+    } catch (error) {
+      console.error("Failed to load dashboard:", error.message);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getDashboardOverviewService();
-        setDashboardData(data);
-      } catch (error) {
-        console.error("Failed to load dashboard:", error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadDashboard();
+
+    const intervalId = setInterval(() => {
+      loadDashboard();
+    }, AUTO_REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadDashboard(true)}
+          />
+        }
+      >
         <PageHeader
           eyebrow="Operations Dashboard"
           title="Staff Home"
@@ -100,6 +123,8 @@ export default function StaffHomeScreen() {
             variant="secondary"
           />
         </FormSection>
+
+        <Text style={styles.refreshHint}>Auto-refreshes every 15 seconds</Text>
       </ScrollView>
 
       <StaffNavBar activeRoute="/staff" />
@@ -121,5 +146,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: COLORS.textMuted,
+  },
+  refreshHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginTop: 8,
   },
 });

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Text, StyleSheet, View, FlatList } from "react-native";
+import {
+  Text,
+  StyleSheet,
+  View,
+  FlatList,
+  RefreshControl,
+} from "react-native";
 import { router } from "expo-router";
 import { INCIDENT_STATUS_FILTERS } from "../../src/constants/incidentFilters";
 import { INCIDENT_SORT_OPTIONS } from "../../src/constants/incidentSortOptions";
@@ -10,7 +16,10 @@ import FormInput from "../../src/components/FormInput";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import PageHeader from "../../src/components/PageHeader";
 import { getIncidentsService } from "../../src/services/staffIncidentService";
+import { API_ROOT_URL } from "../../src/config/api";
 import { COLORS } from "../../src/constants/theme";
+
+const AUTO_REFRESH_INTERVAL = 15000;
 
 function sortIncidents(incidents, sortOption) {
   const sorted = [...incidents];
@@ -38,21 +47,34 @@ export default function IncidentsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [incidents, setIncidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadIncidents = async (isPullRefresh = false) => {
+    try {
+      if (isPullRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading((prev) => (incidents.length === 0 ? true : prev));
+      }
+
+      const data = await getIncidentsService();
+      setIncidents(data);
+    } catch (error) {
+      console.error("Failed to load incidents:", error.message);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const loadIncidents = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getIncidentsService();
-        setIncidents(data);
-      } catch (error) {
-        console.error("Failed to load incidents:", error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadIncidents();
+
+    const intervalId = setInterval(() => {
+      loadIncidents();
+    }, AUTO_REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const filteredIncidents = useMemo(() => {
@@ -89,13 +111,19 @@ export default function IncidentsScreen() {
     });
   };
 
-  const listData = filteredIncidents.map((item) => ({
-    ...item,
-    incidentType: item.resolvedIncidentType || item.incidentType,
-    location: item.resolvedLocationText,
-    victims: item.victimCount,
-    reportedAt: new Date(item.createdAt).toLocaleString(),
-  }));
+  const listData = filteredIncidents.map((item) => {
+    const firstMedia = item.mediaAttachments?.[0];
+
+    return {
+      ...item,
+      incidentType: item.resolvedIncidentType || item.incidentType,
+      location: item.resolvedLocationText,
+      victims: item.victimCount,
+      reportedAt: new Date(item.createdAt).toLocaleString(),
+      mediaCount: item.mediaCount || 0,
+      evidenceImageUrl: firstMedia ? `${API_ROOT_URL}${firstMedia.filePath}` : null,
+    };
+  });
 
   return (
     <>
@@ -145,6 +173,17 @@ export default function IncidentsScreen() {
             )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={() => loadIncidents(true)}
+              />
+            }
+            ListHeaderComponent={
+              <Text style={styles.refreshHint}>
+                Auto-refreshes every 15 seconds
+              </Text>
+            }
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>
@@ -178,5 +217,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: COLORS.textMuted,
+  },
+  refreshHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginBottom: 10,
   },
 });

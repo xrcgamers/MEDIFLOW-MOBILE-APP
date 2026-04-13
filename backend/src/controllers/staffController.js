@@ -3,6 +3,9 @@ const prisma = require("../config/prisma");
 exports.getIncidents = async (req, res) => {
   try {
     const reports = await prisma.report.findMany({
+      include: {
+        mediaAttachments: true,
+      },
       orderBy: {
         createdAt: "desc",
       },
