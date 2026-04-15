@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import StatusBadge from "./StatusBadge";
 import AppButton from "./AppButton";
-import { COLORS, RADIUS, SHADOW, SPACING } from "../constants/theme";
 import { addResourceActionService } from "../services/resourceService";
+import { useAppTheme } from "../context/ThemeContext";
 
 function getResourceType(status) {
   switch (status) {
@@ -35,26 +35,23 @@ function getResourceIcon(category, status) {
   return "layers-outline";
 }
 
-function getCardAccentStyle(type) {
-  switch (type) {
-    case "success":
-      return styles.successAccent;
-    case "warning":
-      return styles.warningAccent;
-    case "danger":
-      return styles.dangerAccent;
-    case "info":
-      return styles.infoAccent;
-    default:
-      return styles.neutralAccent;
-  }
-}
-
 export default function ResourceCard({ item, onActionComplete }) {
+  const { colors, radius, spacing, shadow } = useAppTheme();
   const type = getResourceType(item.status);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const latestLog = item.actionLogs?.[0] || null;
+
+  const accentStyle =
+    type === "success"
+      ? { borderLeftColor: colors.successText }
+      : type === "warning"
+      ? { borderLeftColor: colors.warningText }
+      : type === "danger"
+      ? { borderLeftColor: colors.dangerText }
+      : type === "info"
+      ? { borderLeftColor: colors.infoText }
+      : { borderLeftColor: colors.neutralText };
 
   const handleAction = async (actionType) => {
     try {
@@ -89,33 +86,93 @@ export default function ResourceCard({ item, onActionComplete }) {
   };
 
   return (
-    <View style={[styles.card, getCardAccentStyle(type)]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          marginBottom: spacing.sm,
+        },
+        shadow,
+        accentStyle,
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${item.label}, status ${item.status}, value ${item.value}`}
+    >
       <View style={styles.topRow}>
-        <View style={styles.iconWrap}>
+        <View
+          style={[
+            styles.iconWrap,
+            {
+              backgroundColor: colors.infoBg,
+            },
+          ]}
+        >
           <Ionicons
             name={getResourceIcon(item.category, item.status)}
             size={20}
-            color={COLORS.primaryDark}
+            color={colors.primaryDark}
           />
         </View>
 
         <StatusBadge label={item.status} type={type} />
       </View>
 
-      <Text style={styles.label}>{item.label}</Text>
-      <Text style={styles.value}>{item.value}</Text>
+      <Text
+        style={[styles.label, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
+        {item.label}
+      </Text>
+      <Text
+        style={[styles.value, { color: colors.text }]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {item.value}
+      </Text>
 
       {latestLog ? (
-        <View style={styles.logBox}>
-          <Text style={styles.logTitle}>Latest Action</Text>
-          <Text style={styles.logMeta}>
+        <View
+          style={[
+            styles.logBox,
+            {
+              backgroundColor: colors.surfaceMuted,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+              padding: spacing.sm,
+              marginBottom: spacing.sm,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.logTitle, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.5}
+          >
+            Latest Action
+          </Text>
+          <Text
+            style={[styles.logMeta, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.5}
+          >
             {latestLog.actionType} • {latestLog.actorName || "Staff User"}
           </Text>
-          <Text style={styles.logMeta}>
+          <Text
+            style={[styles.logMeta, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.5}
+          >
             {new Date(latestLog.createdAt).toLocaleString()}
           </Text>
           {latestLog.note ? (
-            <Text style={styles.logNote}>{latestLog.note}</Text>
+            <Text
+              style={[styles.logNote, { color: colors.text }]}
+              maxFontSizeMultiplier={1.6}
+            >
+              {latestLog.note}
+            </Text>
           ) : null}
         </View>
       ) : null}
@@ -127,6 +184,7 @@ export default function ResourceCard({ item, onActionComplete }) {
             onPress={() => handleAction("MARK_REVIEWED")}
             variant="secondary"
             disabled={isSubmitting}
+            accessibilityLabel={`Mark ${item.label} as reviewed`}
           />
         </View>
 
@@ -135,6 +193,7 @@ export default function ResourceCard({ item, onActionComplete }) {
             title={isSubmitting ? "Working..." : "Escalate"}
             onPress={() => handleAction("ESCALATE")}
             disabled={isSubmitting}
+            accessibilityLabel={`Escalate ${item.label}`}
           />
         </View>
       </View>
@@ -144,64 +203,48 @@ export default function ResourceCard({ item, onActionComplete }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    ...SHADOW.card,
+    borderLeftWidth: 5,
   },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   iconWrap: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: COLORS.infoBg,
     alignItems: "center",
     justifyContent: "center",
   },
   label: {
     fontSize: 14,
-    color: COLORS.textMuted,
     fontWeight: "600",
     marginBottom: 6,
   },
   value: {
     fontSize: 24,
     fontWeight: "800",
-    color: COLORS.text,
     marginBottom: 10,
   },
   logBox: {
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
   },
   logTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: COLORS.textMuted,
     marginBottom: 4,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   logMeta: {
     fontSize: 12,
-    color: COLORS.textMuted,
     marginBottom: 2,
   },
   logNote: {
     fontSize: 13,
-    color: COLORS.text,
     marginTop: 6,
     lineHeight: 18,
   },
@@ -210,25 +253,5 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     marginBottom: 8,
-  },
-  successAccent: {
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.successText,
-  },
-  warningAccent: {
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.warningText,
-  },
-  dangerAccent: {
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.dangerText,
-  },
-  infoAccent: {
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.infoText,
-  },
-  neutralAccent: {
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.neutralText,
   },
 });

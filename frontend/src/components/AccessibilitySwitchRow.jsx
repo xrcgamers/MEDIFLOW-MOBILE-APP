@@ -1,8 +1,9 @@
 import { View, Text, Switch, StyleSheet } from "react-native";
 import { useAppTheme } from "../context/ThemeContext";
 
-export default function FormSwitch({
+export default function AccessibilitySwitchRow({
   label,
+  description,
   value,
   onValueChange,
 }) {
@@ -13,21 +14,32 @@ export default function FormSwitch({
       style={[
         styles.row,
         {
-          paddingVertical: spacing.sm,
           borderBottomColor: colors.border,
+          paddingVertical: spacing.sm,
         },
       ]}
       accessible
       accessibilityRole="switch"
       accessibilityLabel={label}
+      accessibilityHint={description}
       accessibilityState={{ checked: value }}
     >
-      <Text
-        style={[styles.label, { color: colors.text }]}
-        maxFontSizeMultiplier={1.7}
-      >
-        {label}
-      </Text>
+      <View style={styles.textWrap}>
+        <Text
+          style={[styles.label, { color: colors.text }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          {label}
+        </Text>
+        {description ? (
+          <Text
+            style={[styles.description, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.8}
+          >
+            {description}
+          </Text>
+        ) : null}
+      </View>
 
       <Switch
         value={value}
@@ -44,16 +56,23 @@ export default function FormSwitch({
 
 const styles = StyleSheet.create({
   row: {
-    minHeight: 52,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
   },
-  label: {
+  textWrap: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
     paddingRight: 12,
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  description: {
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

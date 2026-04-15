@@ -1,17 +1,42 @@
 import { Pressable, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function QuickStatusAction({
   label,
   active = false,
   onPress,
 }) {
+  const { colors, radius, spacing } = useAppTheme();
+
   return (
     <Pressable
-      style={[styles.chip, active && styles.activeChip]}
+      style={[
+        styles.chip,
+        {
+          borderRadius: radius.pill,
+          backgroundColor: active ? colors.infoBg : colors.surfaceMuted,
+          borderColor: active ? colors.primary : colors.border,
+          marginRight: spacing.sm,
+          marginBottom: spacing.sm,
+          minHeight: 44,
+        },
+      ]}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
     >
-      <Text style={[styles.label, active && styles.activeLabel]}>{label}</Text>
+      <Text
+        style={[
+          styles.label,
+          {
+            color: active ? colors.primaryDark : colors.textMuted,
+          },
+        ]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -20,23 +45,11 @@ const styles = StyleSheet.create({
   chip: {
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: RADIUS.pill,
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  activeChip: {
-    backgroundColor: COLORS.infoBg,
-    borderColor: COLORS.primary,
+    justifyContent: "center",
   },
   label: {
     fontSize: 13,
     fontWeight: "700",
-    color: COLORS.textMuted,
-  },
-  activeLabel: {
-    color: COLORS.primaryDark,
   },
 });

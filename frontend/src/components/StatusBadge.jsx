@@ -1,28 +1,39 @@
 import { View, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function StatusBadge({ label, type = "neutral" }) {
-  const badgeStyle = [
-    styles.badge,
-    type === "success" && styles.success,
-    type === "warning" && styles.warning,
-    type === "danger" && styles.danger,
-    type === "info" && styles.info,
-    type === "neutral" && styles.neutral,
-  ];
+  const { colors, radius } = useAppTheme();
 
-  const textStyle = [
-    styles.text,
-    type === "success" && styles.successText,
-    type === "warning" && styles.warningText,
-    type === "danger" && styles.dangerText,
-    type === "info" && styles.infoText,
-    type === "neutral" && styles.neutralText,
-  ];
+  const theme =
+    type === "success"
+      ? { bg: colors.successBg, text: colors.successText }
+      : type === "warning"
+      ? { bg: colors.warningBg, text: colors.warningText }
+      : type === "danger"
+      ? { bg: colors.dangerBg, text: colors.dangerText }
+      : type === "info"
+      ? { bg: colors.infoBg, text: colors.infoText }
+      : { bg: colors.neutralBg, text: colors.neutralText };
 
   return (
-    <View style={badgeStyle}>
-      <Text style={textStyle}>{label}</Text>
+    <View
+      style={[
+        styles.badge,
+        {
+          backgroundColor: theme.bg,
+          borderRadius: radius.pill,
+        },
+      ]}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`Status ${label}`}
+    >
+      <Text
+        style={[styles.label, { color: theme.text }]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -30,44 +41,11 @@ export default function StatusBadge({ label, type = "neutral" }) {
 const styles = StyleSheet.create({
   badge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: RADIUS.pill,
-    marginTop: SPACING.xs,
+    paddingHorizontal: 10,
   },
-  text: {
+  label: {
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  success: {
-    backgroundColor: COLORS.successBg,
-  },
-  successText: {
-    color: COLORS.successText,
-  },
-  warning: {
-    backgroundColor: COLORS.warningBg,
-  },
-  warningText: {
-    color: COLORS.warningText,
-  },
-  danger: {
-    backgroundColor: COLORS.dangerBg,
-  },
-  dangerText: {
-    color: COLORS.dangerText,
-  },
-  info: {
-    backgroundColor: COLORS.infoBg,
-  },
-  infoText: {
-    color: COLORS.infoText,
-  },
-  neutral: {
-    backgroundColor: COLORS.neutralBg,
-  },
-  neutralText: {
-    color: COLORS.neutralText,
   },
 });

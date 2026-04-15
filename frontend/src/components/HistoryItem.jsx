@@ -1,42 +1,69 @@
 import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function HistoryItem({ item }) {
+  const { colors, radius, spacing } = useAppTheme();
+
   return (
-    <View style={styles.row}>
-      <View style={styles.dot} />
-      <View style={styles.content}>
-        <Text style={styles.label}>{item.label}</Text>
-        <Text style={styles.time}>{item.time}</Text>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.border,
+          borderRadius: radius.md,
+          padding: spacing.md,
+          marginBottom: spacing.sm,
+        },
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${item.label} at ${item.time}`}
+    >
+      <View style={styles.topRow}>
+        <Ionicons
+          name="time-outline"
+          size={18}
+          color={colors.primaryDark}
+          style={styles.icon}
+        />
+        <Text
+          style={[styles.label, { color: colors.text }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {item.label}
+        </Text>
       </View>
+
+      <Text
+        style={[styles.time, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
+        {item.time}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  card: {
+    borderWidth: 1,
+  },
+  topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
+    alignItems: "center",
+    marginBottom: 4,
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#2563eb",
-    marginTop: 5,
-    marginRight: 10,
-  },
-  content: {
-    flex: 1,
+  icon: {
+    marginRight: 8,
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#111827",
+    fontWeight: "700",
+    flexShrink: 1,
   },
   time: {
     fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
   },
 });

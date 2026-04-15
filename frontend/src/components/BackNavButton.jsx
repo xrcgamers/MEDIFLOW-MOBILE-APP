@@ -1,12 +1,14 @@
 import { Pressable, Text, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function BackNavButton({
   label = "Back",
   fallbackRoute = "/",
 }) {
+  const { colors, radius, spacing } = useAppTheme();
+
   const handlePress = () => {
     if (router.canGoBack()) {
       router.back();
@@ -17,15 +19,34 @@ export default function BackNavButton({
   };
 
   return (
-    <Pressable style={styles.button} onPress={handlePress}>
+    <Pressable
+      style={[
+        styles.button,
+        {
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.border,
+          borderRadius: radius.md,
+          marginBottom: spacing.md,
+          minHeight: 44,
+        },
+      ]}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
       <View style={styles.inner}>
         <Ionicons
           name="arrow-back-outline"
           size={18}
-          color={COLORS.primaryDark}
+          color={colors.primaryDark}
           style={styles.icon}
         />
-        <Text style={styles.label}>{label}</Text>
+        <Text
+          style={[styles.label, { color: colors.primaryDark }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -34,11 +55,7 @@ export default function BackNavButton({
 const styles = StyleSheet.create({
   button: {
     alignSelf: "flex-start",
-    marginBottom: SPACING.md,
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -52,6 +69,5 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "700",
-    color: COLORS.primaryDark,
   },
 });

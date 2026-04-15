@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import StatusBadge from "./StatusBadge";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 function getLogType(type, status) {
   if (type === "TRIAGE_ASSESSMENT") {
@@ -20,15 +20,36 @@ function getLogType(type, status) {
 }
 
 export default function StaffLogItem({ item }) {
+  const { colors, radius, spacing } = useAppTheme();
+
   const label =
     item.actionType === "TRIAGE_ASSESSMENT"
       ? "Triage Assessment"
       : "Status Update";
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.border,
+          borderRadius: radius.md,
+          padding: spacing.md,
+          marginBottom: spacing.sm,
+        },
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${label} by ${item.actorName || "authenticated staff user"} at ${new Date(item.createdAt).toLocaleString()}`}
+    >
       <View style={styles.topRow}>
-        <Text style={styles.title}>{label}</Text>
+        <Text
+          style={[styles.title, { color: colors.text }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {label}
+        </Text>
         {item.status ? (
           <StatusBadge
             label={item.status}
@@ -37,27 +58,35 @@ export default function StaffLogItem({ item }) {
         ) : null}
       </View>
 
-      <Text style={styles.meta}>
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
         By: {item.actorName || "Authenticated Staff User"}
       </Text>
 
-      <Text style={styles.meta}>
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
         At: {new Date(item.createdAt).toLocaleString()}
       </Text>
 
-      {item.note ? <Text style={styles.note}>{item.note}</Text> : null}
+      {item.note ? (
+        <Text
+          style={[styles.note, { color: colors.text }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          {item.note}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
   },
   topRow: {
     marginBottom: 8,
@@ -65,17 +94,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: "700",
-    color: COLORS.text,
     marginBottom: 6,
   },
   meta: {
     fontSize: 13,
-    color: COLORS.textMuted,
     marginBottom: 4,
   },
   note: {
     fontSize: 14,
-    color: COLORS.text,
     marginTop: 6,
     lineHeight: 21,
   },

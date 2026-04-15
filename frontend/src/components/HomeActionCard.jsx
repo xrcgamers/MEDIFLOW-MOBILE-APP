@@ -1,13 +1,7 @@
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AppButton from "./AppButton";
-import {
-  COLORS,
-  RADIUS,
-  SHADOW,
-  SPACING,
-  TYPOGRAPHY,
-} from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function HomeActionCard({
   title,
@@ -15,49 +9,75 @@ export default function HomeActionCard({
   buttonTitle,
   onPress,
   variant = "primary",
-  icon = "grid-outline",
+  icon = "sparkles-outline",
 }) {
+  const { colors, radius, spacing, shadow } = useAppTheme();
+
   return (
-    <View style={styles.card}>
-      <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={22} color={COLORS.primaryDark} />
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          marginBottom: spacing.md,
+        },
+        shadow,
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={title}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: colors.infoBg }]}>
+        <Ionicons name={icon} size={22} color={colors.primaryDark} />
       </View>
 
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+      <Text
+        style={[styles.title, { color: colors.text }]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {title}
+      </Text>
 
-      <AppButton title={buttonTitle} onPress={onPress} variant={variant} />
+      <Text
+        style={[styles.description, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.7}
+      >
+        {description}
+      </Text>
+
+      <AppButton
+        title={buttonTitle}
+        onPress={onPress}
+        variant={variant}
+        accessibilityLabel={buttonTitle}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.lg,
-    ...SHADOW.card,
   },
   iconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.infoBg,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: SPACING.md,
+    marginBottom: 12,
   },
   title: {
-    ...TYPOGRAPHY.sectionTitle,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
   },
   description: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.md,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14,
   },
 });

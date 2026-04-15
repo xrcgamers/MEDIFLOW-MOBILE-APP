@@ -1,28 +1,46 @@
 import { View, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SHADOW, SPACING, TYPOGRAPHY } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function FormSection({ title, children }) {
+  const { colors, radius, spacing, shadow } = useAppTheme();
+
   return (
-    <View style={styles.section}>
-      <Text style={styles.title}>{title}</Text>
-      <View>{children}</View>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+        },
+        shadow,
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={title}
+    >
+      <Text
+        style={[styles.title, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
+        {title}
+      </Text>
+      {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginBottom: SPACING.lg,
-    padding: SPACING.md,
+  card: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.surface,
-    ...SHADOW.card,
+    marginBottom: 16,
   },
   title: {
-    ...TYPOGRAPHY.sectionTitle,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
 });

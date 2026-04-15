@@ -1,66 +1,73 @@
-export const COLORS = {
-  background: "#f5f7fb",
+export const FALLBACK_COLORS = {
+  background: "#f8fafc",
   surface: "#ffffff",
-  surfaceMuted: "#f9fafb",
+  surfaceMuted: "#f1f5f9",
+  border: "#dbe3ee",
+  text: "#0f172a",
+  textMuted: "#475569",
   primary: "#2563eb",
   primaryDark: "#1d4ed8",
-  secondary: "#111827",
-  text: "#111827",
-  textMuted: "#6b7280",
-  border: "#e5e7eb",
+
   successBg: "#dcfce7",
   successText: "#166534",
+
   warningBg: "#fef3c7",
   warningText: "#92400e",
+
   dangerBg: "#fee2e2",
-  dangerText: "#991b1b",
+  dangerText: "#b91c1c",
+
   infoBg: "#dbeafe",
   infoText: "#1d4ed8",
+
   neutralBg: "#e5e7eb",
   neutralText: "#374151",
+};
+
+export const COLORS = FALLBACK_COLORS;
+
+export const RADIUS = {
+  sm: 10,
+  md: 14,
+  lg: 20,
+  pill: 999,
 };
 
 export const SPACING = {
   xs: 6,
   sm: 10,
   md: 16,
-  lg: 20,
-  xl: 24,
-  xxl: 32,
-};
-
-export const RADIUS = {
-  sm: 10,
-  md: 14,
-  lg: 18,
-  pill: 999,
-};
-
-export const SHADOW = {
-  card: {
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
+  lg: 24,
+  xl: 32,
 };
 
 export const TYPOGRAPHY = {
   title: {
     fontSize: 30,
     fontWeight: "800",
+    lineHeight: 38,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  subtitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    lineHeight: 24,
   },
   body: {
     fontSize: 15,
     lineHeight: 22,
   },
-  small: {
-    fontSize: 13,
-    lineHeight: 18,
+  label: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+};
+
+export const SHADOW = {
+  card: {
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 };

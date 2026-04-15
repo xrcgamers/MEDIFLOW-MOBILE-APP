@@ -1,37 +1,51 @@
 import { View, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function SummaryPill({
   label,
   value,
   type = "neutral",
 }) {
-  const backgroundStyle =
-    type === "success"
-      ? styles.success
-      : type === "warning"
-      ? styles.warning
-      : type === "danger"
-      ? styles.danger
-      : type === "info"
-      ? styles.info
-      : styles.neutral;
+  const { colors, radius, spacing } = useAppTheme();
 
-  const textStyle =
+  const theme =
     type === "success"
-      ? styles.successText
+      ? { bg: colors.successBg, text: colors.successText }
       : type === "warning"
-      ? styles.warningText
+      ? { bg: colors.warningBg, text: colors.warningText }
       : type === "danger"
-      ? styles.dangerText
+      ? { bg: colors.dangerBg, text: colors.dangerText }
       : type === "info"
-      ? styles.infoText
-      : styles.neutralText;
+      ? { bg: colors.infoBg, text: colors.infoText }
+      : { bg: colors.neutralBg, text: colors.neutralText };
 
   return (
-    <View style={[styles.pill, backgroundStyle]}>
-      <Text style={[styles.label, textStyle]}>{label}</Text>
-      <Text style={[styles.value, textStyle]}>{value}</Text>
+    <View
+      style={[
+        styles.pill,
+        {
+          backgroundColor: theme.bg,
+          borderRadius: radius.md,
+          marginRight: spacing.sm,
+          marginBottom: spacing.sm,
+        },
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <Text
+        style={[styles.label, { color: theme.text }]}
+        maxFontSizeMultiplier={1.4}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[styles.value, { color: theme.text }]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -41,9 +55,6 @@ const styles = StyleSheet.create({
     minWidth: 130,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: RADIUS.md,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
   },
   label: {
     fontSize: 11,
@@ -55,35 +66,5 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 14,
     fontWeight: "800",
-  },
-  success: {
-    backgroundColor: COLORS.successBg,
-  },
-  successText: {
-    color: COLORS.successText,
-  },
-  warning: {
-    backgroundColor: COLORS.warningBg,
-  },
-  warningText: {
-    color: COLORS.warningText,
-  },
-  danger: {
-    backgroundColor: COLORS.dangerBg,
-  },
-  dangerText: {
-    color: COLORS.dangerText,
-  },
-  info: {
-    backgroundColor: COLORS.infoBg,
-  },
-  infoText: {
-    color: COLORS.infoText,
-  },
-  neutral: {
-    backgroundColor: COLORS.neutralBg,
-  },
-  neutralText: {
-    color: COLORS.neutralText,
   },
 });

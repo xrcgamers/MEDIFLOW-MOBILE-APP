@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { Stack, router, useSegments } from "expo-router";
-import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { ActivityIndicator, View, StyleSheet, Text } from "react-native";
 import { useAuth } from "../../src/context/AuthContext";
-import { COLORS } from "../../src/constants/theme";
+import { useAppTheme } from "../../src/context/ThemeContext";
 
 export default function AuthLayout() {
   const { isAuthenticated, isBootstrapping } = useAuth();
+  const { colors } = useAppTheme();
   const segments = useSegments();
 
   useEffect(() => {
@@ -16,8 +17,14 @@ export default function AuthLayout() {
 
   if (isBootstrapping) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={[styles.loader, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text
+          style={[styles.loaderText, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          Restoring session...
+        </Text>
       </View>
     );
   }
@@ -30,6 +37,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.background,
+  },
+  loaderText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

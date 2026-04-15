@@ -1,72 +1,71 @@
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function PriorityBanner({
   level,
   score,
   reason,
 }) {
-  const type =
+  const { colors, radius, spacing } = useAppTheme();
+
+  const theme =
     level === "Critical"
-      ? "danger"
+      ? { bg: colors.dangerBg, text: colors.dangerText }
       : level === "High"
-      ? "warning"
+      ? { bg: colors.warningBg, text: colors.warningText }
       : level === "Moderate"
-      ? "info"
-      : "neutral";
-
-  const backgroundStyle =
-    type === "danger"
-      ? styles.dangerBg
-      : type === "warning"
-      ? styles.warningBg
-      : type === "info"
-      ? styles.infoBg
-      : styles.neutralBg;
-
-  const textStyle =
-    type === "danger"
-      ? styles.dangerText
-      : type === "warning"
-      ? styles.warningText
-      : type === "info"
-      ? styles.infoText
-      : styles.neutralText;
+      ? { bg: colors.infoBg, text: colors.infoText }
+      : { bg: colors.neutralBg, text: colors.neutralText };
 
   return (
-    <View style={[styles.container, backgroundStyle]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.bg,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+        },
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`Priority ${level}, score ${score}`}
+    >
       <View style={styles.topRow}>
         <Ionicons
           name="flash-outline"
           size={20}
-          color={
-            type === "danger"
-              ? COLORS.dangerText
-              : type === "warning"
-              ? COLORS.warningText
-              : type === "info"
-              ? COLORS.infoText
-              : COLORS.neutralText
-          }
+          color={theme.text}
           style={styles.icon}
         />
-        <Text style={[styles.title, textStyle]}>
+        <Text
+          style={[styles.title, { color: theme.text }]}
+          maxFontSizeMultiplier={1.5}
+        >
           Priority: {level}
         </Text>
       </View>
 
-      <Text style={[styles.score, textStyle]}>Score: {score}</Text>
-      <Text style={[styles.reason, textStyle]}>{reason}</Text>
+      <Text
+        style={[styles.score, { color: theme.text }]}
+        maxFontSizeMultiplier={1.6}
+      >
+        Score: {score}
+      </Text>
+
+      <Text
+        style={[styles.reason, { color: theme.text }]}
+        maxFontSizeMultiplier={1.8}
+      >
+        {reason}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-  },
+  container: {},
   topRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -87,29 +86,5 @@ const styles = StyleSheet.create({
   reason: {
     fontSize: 14,
     lineHeight: 20,
-  },
-  dangerBg: {
-    backgroundColor: COLORS.dangerBg,
-  },
-  dangerText: {
-    color: COLORS.dangerText,
-  },
-  warningBg: {
-    backgroundColor: COLORS.warningBg,
-  },
-  warningText: {
-    color: COLORS.warningText,
-  },
-  infoBg: {
-    backgroundColor: COLORS.infoBg,
-  },
-  infoText: {
-    color: COLORS.infoText,
-  },
-  neutralBg: {
-    backgroundColor: COLORS.neutralBg,
-  },
-  neutralText: {
-    color: COLORS.neutralText,
   },
 });

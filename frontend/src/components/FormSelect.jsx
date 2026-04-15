@@ -1,56 +1,173 @@
-import { View, Text, StyleSheet } from "react-native";
-import { Picker } from "@react-native-picker/picker";
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "../constants/theme";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function FormSelect({
   label,
   selectedValue,
   onValueChange,
   options = [],
-  placeholder = "Select an option",
+  placeholder = "Select option",
   error,
 }) {
+  const { colors, radius, spacing, shadow } = useAppTheme();
+  const [open, setOpen] = useState(false);
+
+  const displayValue =
+    selectedValue && selectedValue.length > 0 ? selectedValue : placeholder;
+
+  const handleSelect = (value) => {
+    onValueChange(value);
+    setOpen(false);
+  };
+
   return (
-    <View style={styles.wrapper}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+    <View style={{ marginBottom: spacing.md }}>
+      {label ? (
+        <Text
+          style={[styles.label, { color: colors.text }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {label}
+        </Text>
+      ) : null}
 
-      <View style={[styles.pickerWrapper, error ? styles.errorBorder : null]}>
-        <Picker selectedValue={selectedValue} onValueChange={onValueChange}>
-          <Picker.Item label={placeholder} value="" />
-          {options.map((option) => (
-            <Picker.Item key={option} label={option} value={option} />
-          ))}
-        </Picker>
-      </View>
+      <Pressable
+        onPress={() => setOpen((prev) => !prev)}
+        style={[
+          styles.trigger,
+          {
+            backgroundColor: colors.surfaceMuted,
+            borderColor: error ? colors.dangerText : colors.border,
+            borderRadius: radius.md,
+            minHeight: 48,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={label || "Select field"}
+        accessibilityState={{ expanded: open }}
+      >
+        <Text
+          style={[
+            styles.triggerText,
+            {
+              color:
+                selectedValue && selectedValue.length > 0
+                  ? colors.text
+                  : colors.textMuted,
+            },
+          ]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {displayValue}
+        </Text>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <Ionicons
+          name={open ? "chevron-up-outline" : "chevron-down-outline"}
+          size={18}
+          color={colors.textMuted}
+        />
+      </Pressable>
+
+      {open ? (
+        <View
+          style={[
+            styles.menu,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+            },
+            shadow,
+          ]}
+        >
+          {options.map((option) => {
+            const optionLabel =
+              typeof option === "string" ? option : option.label || option.value;
+            const optionValue =
+              typeof option === "string" ? option : option.value;
+
+            const active = selectedValue === optionValue;
+
+            return (
+              <Pressable
+                key={optionValue}
+                onPress={() => handleSelect(optionValue)}
+                style={[
+                  styles.option,
+                  {
+                    backgroundColor: active ? colors.infoBg : "transparent",
+                    minHeight: 44,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={optionLabel}
+              >
+                <Text
+                  style={[
+                    styles.optionText,
+                    {
+                      color: active ? colors.primaryDark : colors.text,
+                    },
+                  ]}
+                  maxFontSizeMultiplier={1.6}
+                >
+                  {optionLabel}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {error ? (
+        <Text
+          style={[styles.error, { color: colors.dangerText }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: SPACING.sm,
-  },
   label: {
     fontSize: 14,
     fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 8,
   },
-  pickerWrapper: {
+  trigger: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  triggerText: {
+    fontSize: 15,
+    flex: 1,
+    marginRight: 8,
+  },
+  menu: {
+    marginTop: 8,
+    borderWidth: 1,
     overflow: "hidden",
-    backgroundColor: COLORS.surface,
   },
-  errorBorder: {
-    borderColor: "#ef4444",
+  option: {
+    paddingHorizontal: 14,
+    justifyContent: "center",
   },
-  errorText: {
-    color: "#dc2626",
+  optionText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  error: {
+    fontSize: 12,
     marginTop: 6,
-    ...TYPOGRAPHY.small,
+    fontWeight: "600",
   },
 });

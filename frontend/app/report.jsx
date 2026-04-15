@@ -12,9 +12,12 @@ import FormSelect from "../src/components/FormSelect";
 import FormSection from "../src/components/FormSection";
 import PageHeader from "../src/components/PageHeader";
 import BackNavButton from "../src/components/BackNavButton";
-import { COLORS, RADIUS } from "../src/constants/theme";
+import ThemeModeToggle from "../src/components/ThemeModeToggle";
+import { useAppTheme } from "../src/context/ThemeContext";
 
 export default function ReportScreen() {
+  const { colors, radius, spacing, typography } = useAppTheme();
+
   const [form, setForm] = useState({
     incidentType: "",
     otherIncidentType: "",
@@ -43,7 +46,6 @@ export default function ReportScreen() {
   const fetchLocation = async () => {
     try {
       setIsGettingLocation(true);
-
       const result = await getCurrentLocationService();
 
       setForm((prev) => ({
@@ -85,7 +87,6 @@ export default function ReportScreen() {
   const handleCapturePhoto = async () => {
     try {
       setIsCapturingPhoto(true);
-
       const capturedImage = await captureReportPhotoService();
 
       if (!capturedImage) {
@@ -142,7 +143,12 @@ export default function ReportScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: colors.background, padding: spacing.lg },
+      ]}
+    >
       <BackNavButton label="Back to Home" fallbackRoute="/" />
 
       <PageHeader
@@ -151,6 +157,16 @@ export default function ReportScreen() {
         subtitle="Your current location is captured automatically. You may also add a short landmark description."
         icon="warning-outline"
       />
+
+      <FormSection title="Appearance">
+        <ThemeModeToggle />
+        <Text
+          style={[styles.helperText, typography.body, { color: colors.textMuted, marginTop: spacing.sm }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          Choose your preferred appearance before continuing.
+        </Text>
+      </FormSection>
 
       <FormSection title="Incident Details">
         <FormSelect
@@ -199,11 +215,19 @@ export default function ReportScreen() {
         />
 
         {isGettingLocation ? (
-          <Text style={styles.locationInfo}>Fetching your location...</Text>
+          <Text
+            style={[styles.locationInfo, typography.body, { color: colors.primaryDark }]}
+            maxFontSizeMultiplier={1.8}
+          >
+            Fetching your location...
+          </Text>
         ) : null}
 
         {form.latitude && form.longitude ? (
-          <Text style={styles.locationMeta}>
+          <Text
+            style={[styles.locationMeta, typography.body, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.8}
+          >
             Coordinates: {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
           </Text>
         ) : null}
@@ -238,9 +262,15 @@ export default function ReportScreen() {
           <View style={styles.previewWrap}>
             <Image
               source={{ uri: form.capturedImage.uri }}
-              style={styles.previewImage}
+              style={[styles.previewImage, { borderRadius: radius.lg }]}
+              accessibilityLabel="Captured incident photo"
             />
-            <Text style={styles.previewText}>Captured incident photo</Text>
+            <Text
+              style={[styles.previewText, typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              Captured incident photo
+            </Text>
             <AppButton
               title="Remove Photo"
               onPress={handleRemovePhoto}
@@ -248,7 +278,10 @@ export default function ReportScreen() {
             />
           </View>
         ) : (
-          <Text style={styles.mediaHint}>
+          <Text
+            style={[styles.mediaHint, typography.body, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.8}
+          >
             Capture a real-time photo from the camera if needed.
           </Text>
         )}
@@ -265,23 +298,19 @@ export default function ReportScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
-    backgroundColor: COLORS.background,
     flexGrow: 1,
   },
+  helperText: {
+    lineHeight: 22,
+  },
   locationMeta: {
-    fontSize: 13,
-    color: "#374151",
     marginVertical: 10,
   },
   locationInfo: {
-    fontSize: 14,
-    color: "#0f766e",
     marginBottom: 10,
+    fontWeight: "600",
   },
   mediaHint: {
-    fontSize: 14,
-    color: COLORS.textMuted,
     marginTop: 10,
   },
   previewWrap: {
@@ -290,12 +319,9 @@ const styles = StyleSheet.create({
   previewImage: {
     width: "100%",
     height: 220,
-    borderRadius: RADIUS.lg,
     marginBottom: 10,
   },
   previewText: {
-    fontSize: 14,
-    color: "#374151",
     marginBottom: 4,
     fontWeight: "600",
   },

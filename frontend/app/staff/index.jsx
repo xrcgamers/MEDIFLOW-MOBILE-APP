@@ -17,8 +17,9 @@ import ResourceAlertCard from "../../src/components/ResourceAlertCard";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import ProfileCard from "../../src/components/ProfileCard";
 import PageHeader from "../../src/components/PageHeader";
+import ThemeModeToggle from "../../src/components/ThemeModeToggle";
 import { getDashboardOverviewService } from "../../src/services/dashboardService";
-import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
+import { useAppTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 
 const AUTO_REFRESH_INTERVAL = 15000;
@@ -30,40 +31,36 @@ function getStatNavigationParams(label) {
       params: { priority: "Critical" },
     };
   }
-
   if (label === "High Urgency Cases") {
     return {
       pathname: "/staff/incidents",
       params: { priority: "High" },
     };
   }
-
   if (label === "Reports Received Today") {
     return {
       pathname: "/staff/incidents",
       params: { status: "Received" },
     };
   }
-
   if (label === "Emergency Beds Available") {
     return {
       pathname: "/staff/resources",
       params: { section: "beds" },
     };
   }
-
   if (label === "Theatres Ready") {
     return {
       pathname: "/staff/resources",
       params: { section: "theatre" },
     };
   }
-
   return null;
 }
 
 export default function StaffHomeScreen() {
   const { user, logout } = useAuth();
+  const { colors, spacing, typography } = useAppTheme();
 
   const [dashboardData, setDashboardData] = useState({
     stats: [],
@@ -95,7 +92,6 @@ export default function StaffHomeScreen() {
 
   useEffect(() => {
     loadDashboard();
-
     const intervalId = setInterval(() => {
       loadDashboard();
     }, AUTO_REFRESH_INTERVAL);
@@ -108,22 +104,13 @@ export default function StaffHomeScreen() {
     router.replace("/auth/login");
   };
 
-  const handleGoToIncidents = () => {
-    router.push("/staff/incidents");
-  };
-
-  const handleGoToTriage = () => {
-    router.push("/staff/triage");
-  };
-
-  const handleGoToResources = () => {
-    router.push("/staff/resources");
-  };
-
   return (
     <>
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background, paddingBottom: 120 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -138,44 +125,72 @@ export default function StaffHomeScreen() {
           icon="speedometer-outline"
         />
 
+        <FormSection title="Appearance">
+          <ThemeModeToggle />
+          <Text
+            style={[
+              styles.helperText,
+              typography.body,
+              { color: colors.textMuted, marginTop: spacing.sm },
+            ]}
+            maxFontSizeMultiplier={1.8}
+          >
+            Choose light, dark, or follow the device setting.
+          </Text>
+        </FormSection>
+
         <FormSection title="Quick Navigation">
           <View style={styles.quickNavWrap}>
-            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
-              <Ionicons
-                name="list-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Reports List</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickNavButton} onPress={handleGoToTriage}>
-              <Ionicons
-                name="pulse-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Open Triage</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
-              <Ionicons
-                name="layers-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Resources</Text>
-            </Pressable>
+            {[
+              { label: "Reports List", icon: "list-outline", route: "/staff/incidents" },
+              { label: "Open Triage", icon: "pulse-outline", route: "/staff/triage" },
+              { label: "Resources", icon: "layers-outline", route: "/staff/resources" },
+              { label: "Settings", icon: "settings-outline", route: "/staff/settings" },
+            ].map((item) => (
+              <Pressable
+                key={item.route}
+                style={[
+                  styles.quickNavButton,
+                  {
+                    backgroundColor: colors.surfaceMuted,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => router.push(item.route)}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+              >
+                <Ionicons
+                  name={item.icon}
+                  size={18}
+                  color={colors.primaryDark}
+                  style={styles.quickNavIcon}
+                />
+                <Text
+                  style={[
+                    styles.quickNavText,
+                    typography.label,
+                    { color: colors.primaryDark },
+                  ]}
+                  maxFontSizeMultiplier={1.7}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         </FormSection>
 
-        <Text style={styles.refreshHint}>
+        <Text
+          style={[styles.refreshHint, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.7}
+        >
           Auto-refreshes every 15 seconds
         </Text>
-        <Text style={styles.lastRefreshed}>
+        <Text
+          style={[styles.lastRefreshed, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.7}
+        >
           Last refreshed:{" "}
           {lastRefreshed
             ? lastRefreshed.toLocaleTimeString([], {
@@ -197,20 +212,20 @@ export default function StaffHomeScreen() {
               identifier: user?.email || user?.staffId,
             }}
           />
-          <AppButton
-            title="Logout"
-            onPress={handleLogout}
-            variant="secondary"
-          />
+          <AppButton title="Logout" onPress={handleLogout} variant="secondary" />
         </FormSection>
 
         <FormSection title="Today’s Overview">
           {isLoading ? (
-            <Text style={styles.loadingText}>Loading dashboard stats...</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              Loading dashboard stats...
+            </Text>
           ) : dashboardData.stats.length > 0 ? (
             dashboardData.stats.map((item) => {
               const navigationTarget = getStatNavigationParams(item.label);
-
               return (
                 <StatCard
                   key={item.id}
@@ -224,49 +239,55 @@ export default function StaffHomeScreen() {
               );
             })
           ) : (
-            <Text style={styles.emptyText}>No dashboard stats available.</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              No dashboard stats available.
+            </Text>
           )}
         </FormSection>
 
         <FormSection title="Priority Alerts">
           {isLoading ? (
-            <Text style={styles.loadingText}>Loading alerts...</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              Loading alerts...
+            </Text>
           ) : dashboardData.alerts.length > 0 ? (
-            dashboardData.alerts.map((item) => (
-              <AlertCard key={item.id} item={item} />
-            ))
+            dashboardData.alerts.map((item) => <AlertCard key={item.id} item={item} />)
           ) : (
-            <Text style={styles.emptyText}>No active alerts right now.</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              No active alerts right now.
+            </Text>
           )}
         </FormSection>
 
         <FormSection title="Resource Attention">
           {isLoading ? (
-            <Text style={styles.loadingText}>Loading resource alerts...</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              Loading resource alerts...
+            </Text>
           ) : dashboardData.resourceAlerts.length > 0 ? (
             dashboardData.resourceAlerts.map((item) => (
               <ResourceAlertCard key={item.id} item={item} />
             ))
           ) : (
-            <Text style={styles.emptyText}>No resource constraints right now.</Text>
+            <Text
+              style={[typography.body, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.8}
+            >
+              No resource constraints right now.
+            </Text>
           )}
-        </FormSection>
-
-        <FormSection title="Operations">
-          <AppButton
-            title="View Incoming Reports"
-            onPress={handleGoToIncidents}
-          />
-          <AppButton
-            title="Open Triage"
-            onPress={handleGoToTriage}
-            variant="secondary"
-          />
-          <AppButton
-            title="View Resources"
-            onPress={handleGoToResources}
-            variant="secondary"
-          />
         </FormSection>
       </ScrollView>
 
@@ -278,8 +299,6 @@ export default function StaffHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 24,
-    paddingBottom: 120,
-    backgroundColor: COLORS.background,
     flexGrow: 1,
   },
   quickNavWrap: {
@@ -289,41 +308,29 @@ const styles = StyleSheet.create({
   quickNavButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
+    borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
+    marginRight: 10,
+    marginBottom: 10,
+    minHeight: 44,
   },
   quickNavIcon: {
     marginRight: 6,
   },
-  quickNavText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primaryDark,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
+  quickNavText: {},
+  helperText: {
+    lineHeight: 22,
   },
   refreshHint: {
     fontSize: 12,
-    color: COLORS.textMuted,
     textAlign: "center",
     marginTop: -10,
     marginBottom: 4,
   },
   lastRefreshed: {
     fontSize: 12,
-    color: COLORS.textMuted,
     textAlign: "center",
     marginBottom: 16,
   },

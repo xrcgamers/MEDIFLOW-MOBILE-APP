@@ -1,29 +1,40 @@
 import { View, Text, StyleSheet } from "react-native";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function TimelineItem({ item, isLast = false }) {
+  const { colors, spacing } = useAppTheme();
+
   return (
-    <View style={styles.row}>
+    <View
+      style={[styles.row, { marginBottom: isLast ? 0 : spacing.md }]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${item.label} at ${item.time}`}
+    >
       <View style={styles.leftColumn}>
         <View
-          style={[
-            styles.dot,
-            item.completed ? styles.doneDot : styles.pendingDot,
-          ]}
+          style={[styles.dot, { backgroundColor: colors.primaryDark }]}
         />
         {!isLast ? (
           <View
-            style={[
-              styles.line,
-              item.completed ? styles.doneLine : styles.pendingLine,
-            ]}
+            style={[styles.line, { backgroundColor: colors.border }]}
           />
         ) : null}
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.description}>{item.description}</Text>
-        <Text style={styles.time}>{item.time}</Text>
+        <Text
+          style={[styles.label, { color: colors.text }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {item.label}
+        </Text>
+        <Text
+          style={[styles.time, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {item.time}
+        </Text>
       </View>
     </View>
   );
@@ -33,55 +44,33 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 4,
   },
   leftColumn: {
     width: 24,
     alignItems: "center",
   },
   dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     marginTop: 4,
-    zIndex: 2,
-  },
-  doneDot: {
-    backgroundColor: "#16a34a",
-  },
-  pendingDot: {
-    backgroundColor: "#9ca3af",
   },
   line: {
     width: 2,
-    minHeight: 48,
-    marginTop: 2,
-  },
-  doneLine: {
-    backgroundColor: "#86efac",
-  },
-  pendingLine: {
-    backgroundColor: "#d1d5db",
+    flex: 1,
+    minHeight: 34,
+    marginTop: 4,
   },
   content: {
     flex: 1,
-    paddingBottom: 18,
     paddingLeft: 8,
   },
-  title: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  description: {
+  label: {
     fontSize: 14,
-    color: "#4b5563",
-    marginBottom: 4,
-    lineHeight: 20,
+    fontWeight: "700",
+    marginBottom: 2,
   },
   time: {
-    fontSize: 12,
-    color: "#6b7280",
+    fontSize: 13,
   },
 });

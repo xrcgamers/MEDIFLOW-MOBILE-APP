@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function ResourceSummaryCard({
   label,
@@ -7,46 +7,63 @@ export default function ResourceSummaryCard({
   type = "neutral",
   trend = "",
 }) {
+  const { colors, radius, spacing } = useAppTheme();
+
   const backgroundStyle =
     type === "success"
-      ? styles.successBg
+      ? { backgroundColor: colors.successBg, color: colors.successText }
       : type === "warning"
-      ? styles.warningBg
+      ? { backgroundColor: colors.warningBg, color: colors.warningText }
       : type === "danger"
-      ? styles.dangerBg
+      ? { backgroundColor: colors.dangerBg, color: colors.dangerText }
       : type === "info"
-      ? styles.infoBg
-      : styles.neutralBg;
-
-  const textStyle =
-    type === "success"
-      ? styles.successText
-      : type === "warning"
-      ? styles.warningText
-      : type === "danger"
-      ? styles.dangerText
-      : type === "info"
-      ? styles.infoText
-      : styles.neutralText;
+      ? { backgroundColor: colors.infoBg, color: colors.infoText }
+      : { backgroundColor: colors.neutralBg, color: colors.neutralText };
 
   return (
-    <View style={[styles.card, backgroundStyle]}>
-      <Text style={[styles.label, textStyle]}>{label}</Text>
-      <Text style={[styles.value, textStyle]}>{value}</Text>
-      {trend ? <Text style={[styles.trend, textStyle]}>{trend}</Text> : null}
+    <View
+      style={[
+        styles.card,
+        {
+          minWidth: 150,
+          paddingVertical: 12,
+          paddingHorizontal: 14,
+          borderRadius: radius.md,
+          marginRight: spacing.sm,
+          marginBottom: spacing.sm,
+          backgroundColor: backgroundStyle.backgroundColor,
+        },
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`${label}, value ${value}${trend ? `, ${trend}` : ""}`}
+    >
+      <Text
+        style={[styles.label, { color: backgroundStyle.color }]}
+        maxFontSizeMultiplier={1.5}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[styles.value, { color: backgroundStyle.color }]}
+        maxFontSizeMultiplier={1.4}
+      >
+        {value}
+      </Text>
+      {trend ? (
+        <Text
+          style={[styles.trend, { color: backgroundStyle.color }]}
+          maxFontSizeMultiplier={1.5}
+        >
+          {trend}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    minWidth: 150,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: RADIUS.md,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
+  card: {},
   label: {
     fontSize: 11,
     fontWeight: "700",
@@ -62,35 +79,5 @@ const styles = StyleSheet.create({
   trend: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  successBg: {
-    backgroundColor: COLORS.successBg,
-  },
-  successText: {
-    color: COLORS.successText,
-  },
-  warningBg: {
-    backgroundColor: COLORS.warningBg,
-  },
-  warningText: {
-    color: COLORS.warningText,
-  },
-  dangerBg: {
-    backgroundColor: COLORS.dangerBg,
-  },
-  dangerText: {
-    color: COLORS.dangerText,
-  },
-  infoBg: {
-    backgroundColor: COLORS.infoBg,
-  },
-  infoText: {
-    color: COLORS.infoText,
-  },
-  neutralBg: {
-    backgroundColor: COLORS.neutralBg,
-  },
-  neutralText: {
-    color: COLORS.neutralText,
   },
 });

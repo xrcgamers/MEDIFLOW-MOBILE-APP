@@ -5,12 +5,14 @@ import AppButton from "../../src/components/AppButton";
 import FormSection from "../../src/components/FormSection";
 import PageHeader from "../../src/components/PageHeader";
 import BackNavButton from "../../src/components/BackNavButton";
+import ThemeModeToggle from "../../src/components/ThemeModeToggle";
 import { validateLoginForm } from "../../src/validators/authValidators";
-import { COLORS } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
+import { useAppTheme } from "../../src/context/ThemeContext";
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { colors, typography, spacing } = useAppTheme();
 
   const [form, setForm] = useState({
     identifier: "",
@@ -46,7 +48,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <BackNavButton label="Back to Home" fallbackRoute="/" />
 
       <PageHeader
@@ -55,6 +57,10 @@ export default function LoginScreen() {
         subtitle="Authorized hospital staff only."
         icon="shield-checkmark-outline"
       />
+
+      <FormSection title="Appearance">
+        <ThemeModeToggle />
+      </FormSection>
 
       <FormSection title="Login Details">
         <FormInput
@@ -76,9 +82,24 @@ export default function LoginScreen() {
       </FormSection>
 
       <FormSection title="Demo Access">
-        <Text style={styles.demoText}>Email: staff001@mediflow.ug</Text>
-        <Text style={styles.demoText}>Staff ID: STAFF001</Text>
-        <Text style={styles.demoText}>Password: Mediflow123</Text>
+        <Text
+          style={[styles.demoText, typography.body, { color: colors.text, marginBottom: spacing.xs }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          Email: staff001@mediflow.ug
+        </Text>
+        <Text
+          style={[styles.demoText, typography.body, { color: colors.text, marginBottom: spacing.xs }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          Staff ID: STAFF001
+        </Text>
+        <Text
+          style={[styles.demoText, typography.body, { color: colors.text }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          Password: Mediflow123
+        </Text>
       </FormSection>
 
       <AppButton
@@ -94,12 +115,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
-    backgroundColor: COLORS.background,
   },
   demoText: {
-    fontSize: 14,
-    color: "#111827",
-    marginBottom: 6,
     fontWeight: "600",
   },
 });

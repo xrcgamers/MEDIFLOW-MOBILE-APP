@@ -31,7 +31,7 @@ import {
   updateIncidentStatusService,
 } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
-import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
+import { useAppTheme } from "../../src/context/ThemeContext";
 
 const QUICK_STATUS_PRESETS = [
   {
@@ -150,6 +150,7 @@ function computePriority(incident, latestTriage) {
 }
 
 export default function IncidentDetailsScreen() {
+  const { colors, radius, spacing } = useAppTheme();
   const params = useLocalSearchParams();
   const [incident, setIncident] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState("Received");
@@ -167,7 +168,6 @@ export default function IncidentDetailsScreen() {
         setSelectedStatus(data.status);
         setStaffNote(data.staffNote || "");
       } catch (error) {
-        console.error("Failed to load incident:", error.message);
         Alert.alert("Load Failed", "Unable to load incident details.");
       } finally {
         setIsLoading(false);
@@ -219,25 +219,8 @@ export default function IncidentDetailsScreen() {
     });
   };
 
-  const handleGoToIncidents = () => {
-    router.push("/staff/incidents");
-  };
-
-  const handleGoToResources = () => {
-    router.push("/staff/resources");
-  };
-
-  const handleGoToDashboard = () => {
-    router.push("/staff");
-  };
-
-  const openPreview = (url) => {
-    setPreviewImageUrl(url);
-  };
-
-  const closePreview = () => {
-    setPreviewImageUrl(null);
-  };
+  const openPreview = (url) => setPreviewImageUrl(url);
+  const closePreview = () => setPreviewImageUrl(null);
 
   const handleOpenMaps = async () => {
     if (
@@ -254,21 +237,21 @@ export default function IncidentDetailsScreen() {
 
     try {
       const supported = await Linking.canOpenURL(url);
-
       if (!supported) {
         Alert.alert("Maps Unavailable", "Unable to open Google Maps.");
         return;
       }
-
       await Linking.openURL(url);
-    } catch (error) {
+    } catch {
       Alert.alert("Maps Error", "Failed to open map location.");
     }
   };
 
   if (isLoading) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      >
         <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
         <PageHeader
           eyebrow="Incident Review"
@@ -282,7 +265,9 @@ export default function IncidentDetailsScreen() {
 
   if (!incident) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      >
         <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
         <PageHeader
           eyebrow="Incident Review"
@@ -318,7 +303,9 @@ export default function IncidentDetailsScreen() {
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      >
         <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
 
         <PageHeader
@@ -327,50 +314,6 @@ export default function IncidentDetailsScreen() {
           subtitle="Review the incident and choose the next action."
           icon="eye-outline"
         />
-
-        <FormSection title="Quick Navigation">
-          <View style={styles.quickNavWrap}>
-            <Pressable style={styles.quickNavButton} onPress={handleGoToDashboard}>
-              <Ionicons
-                name="home-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Staff Home</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickNavButton} onPress={handleGoToIncidents}>
-              <Ionicons
-                name="list-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Reports List</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickNavButton} onPress={handleProceedToTriage}>
-              <Ionicons
-                name="pulse-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Open Triage</Text>
-            </Pressable>
-
-            <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
-              <Ionicons
-                name="layers-outline"
-                size={18}
-                color={COLORS.primaryDark}
-                style={styles.quickNavIcon}
-              />
-              <Text style={styles.quickNavText}>Resources</Text>
-            </Pressable>
-          </View>
-        </FormSection>
 
         <FormSection title="Priority Overview">
           <PriorityBanner
@@ -387,21 +330,9 @@ export default function IncidentDetailsScreen() {
               value={selectedStatus}
               type={publicStatusType}
             />
-            <SummaryPill
-              label="Triage"
-              value={triageValue}
-              type={triageType}
-            />
-            <SummaryPill
-              label="Evidence"
-              value={evidenceValue}
-              type={evidenceType}
-            />
-            <SummaryPill
-              label="Location"
-              value={locationValue}
-              type={locationType}
-            />
+            <SummaryPill label="Triage" value={triageValue} type={triageType} />
+            <SummaryPill label="Evidence" value={evidenceValue} type={evidenceType} />
+            <SummaryPill label="Location" value={locationValue} type={locationType} />
           </View>
         </FormSection>
 
@@ -431,25 +362,38 @@ export default function IncidentDetailsScreen() {
           <InfoRow label="Typed Landmark" value={incident.manualLocationText} />
           <InfoRow
             label="Coordinates"
-            value={
-              hasCoordinates
-                ? `${incident.latitude}, ${incident.longitude}`
-                : "Not available"
-            }
+            value={hasCoordinates ? `${incident.latitude}, ${incident.longitude}` : "Not available"}
           />
         </FormSection>
 
         <FormSection title="Location Preview">
-          <View style={styles.mapCard}>
-            <View style={styles.mapIconWrap}>
-              <Ionicons name="location-outline" size={24} color={COLORS.primaryDark} />
+          <View
+            style={[
+              styles.mapCard,
+              {
+                borderColor: colors.border,
+                borderRadius: radius.lg,
+                backgroundColor: colors.surfaceMuted,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.mapIconWrap,
+                { backgroundColor: colors.infoBg },
+              ]}
+            >
+              <Ionicons name="location-outline" size={24} color={colors.primaryDark} />
             </View>
 
-            <Text style={styles.mapTitle}>
+            <Text style={[styles.mapTitle, { color: colors.text }]} maxFontSizeMultiplier={1.5}>
               {incident.resolvedLocationText || "Location not available"}
             </Text>
 
-            <Text style={styles.mapSubtitle}>
+            <Text
+              style={[styles.mapSubtitle, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.6}
+            >
               {hasCoordinates
                 ? `${incident.latitude}, ${incident.longitude}`
                 : "Coordinates not available"}
@@ -477,15 +421,32 @@ export default function IncidentDetailsScreen() {
                   key={item.id}
                   style={styles.mediaBlock}
                   onPress={() => openPreview(imageUrl)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open evidence image ${item.fileName}`}
                 >
-                  <Image source={{ uri: imageUrl }} style={styles.mediaImage} />
-                  <Text style={styles.mediaName}>{item.fileName}</Text>
-                  <Text style={styles.tapHint}>Tap to view fullscreen</Text>
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={[styles.mediaImage, { borderRadius: radius.lg }]}
+                  />
+                  <Text
+                    style={[styles.mediaName, { color: colors.textMuted }]}
+                    maxFontSizeMultiplier={1.6}
+                  >
+                    {item.fileName}
+                  </Text>
+                  <Text
+                    style={[styles.tapHint, { color: colors.primaryDark }]}
+                    maxFontSizeMultiplier={1.5}
+                  >
+                    Tap to view fullscreen
+                  </Text>
                 </Pressable>
               );
             })
           ) : (
-            <Text style={styles.emptyText}>No uploaded evidence available.</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No uploaded evidence available.
+            </Text>
           )}
         </FormSection>
 
@@ -502,19 +463,32 @@ export default function IncidentDetailsScreen() {
                 label="Assessed At"
                 value={new Date(latestTriage.createdAt).toLocaleString()}
               />
-              <Text style={styles.reasonTitle}>Reasons</Text>
+              <Text
+                style={[styles.reasonTitle, { color: colors.textMuted }]}
+                maxFontSizeMultiplier={1.5}
+              >
+                Reasons
+              </Text>
               {latestTriage.reasons?.length ? (
                 latestTriage.reasons.map((reason) => (
-                  <Text key={reason} style={styles.reasonItem}>
+                  <Text
+                    key={reason}
+                    style={[styles.reasonItem, { color: colors.text }]}
+                    maxFontSizeMultiplier={1.7}
+                  >
                     • {reason}
                   </Text>
                 ))
               ) : (
-                <Text style={styles.reasonItem}>• No reasons recorded</Text>
+                <Text style={[styles.reasonItem, { color: colors.text }]}>
+                  • No reasons recorded
+                </Text>
               )}
             </>
           ) : (
-            <Text style={styles.emptyText}>No triage assessment linked yet.</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No triage assessment linked yet.
+            </Text>
           )}
         </FormSection>
 
@@ -524,7 +498,9 @@ export default function IncidentDetailsScreen() {
               <StaffLogItem key={log.id} item={log} />
             ))
           ) : (
-            <Text style={styles.emptyText}>No staff actions recorded yet.</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No staff actions recorded yet.
+            </Text>
           )}
         </FormSection>
 
@@ -544,17 +520,15 @@ export default function IncidentDetailsScreen() {
               />
             ))
           ) : (
-            <Text style={styles.emptyText}>No status history available.</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No status history available.
+            </Text>
           )}
         </FormSection>
 
         <FormSection title="Review Actions">
           <AppButton title="Accept Report" onPress={handleAccept} />
-          <AppButton
-            title="Reject Report"
-            onPress={handleReject}
-            variant="secondary"
-          />
+          <AppButton title="Reject Report" onPress={handleReject} variant="secondary" />
           <AppButton
             title="Mark Duplicate"
             onPress={handleMarkDuplicate}
@@ -563,7 +537,12 @@ export default function IncidentDetailsScreen() {
         </FormSection>
 
         <FormSection title="Public Tracking Update">
-          <Text style={styles.quickTitle}>Quick Presets</Text>
+          <Text
+            style={[styles.quickTitle, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.5}
+          >
+            Quick Presets
+          </Text>
           <View style={styles.quickWrap}>
             {QUICK_STATUS_PRESETS.map((preset) => (
               <QuickStatusAction
@@ -575,7 +554,10 @@ export default function IncidentDetailsScreen() {
             ))}
           </View>
 
-          <Text style={styles.quickHint}>
+          <Text
+            style={[styles.quickHint, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.7}
+          >
             Tap a preset to auto-fill the status and a suggested staff note.
           </Text>
 
@@ -614,14 +596,20 @@ export default function IncidentDetailsScreen() {
         onRequestClose={closePreview}
       >
         <View style={styles.modalOverlay}>
-          <Pressable style={styles.closeButton} onPress={closePreview}>
+          <Pressable
+            style={[
+              styles.closeButton,
+              { backgroundColor: "rgba(255,255,255,0.15)" },
+            ]}
+            onPress={closePreview}
+          >
             <Ionicons name="close" size={24} color="#ffffff" />
           </Pressable>
 
           {previewImageUrl ? (
             <Image
               source={{ uri: previewImageUrl }}
-              style={styles.fullscreenImage}
+              style={[styles.fullscreenImage, { borderRadius: radius.md }]}
               resizeMode="contain"
             />
           ) : null}
@@ -634,32 +622,7 @@ export default function IncidentDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 24,
-    backgroundColor: COLORS.background,
     flexGrow: 1,
-  },
-  quickNavWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  quickNavButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surfaceMuted,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  quickNavIcon: {
-    marginRight: 6,
-  },
-  quickNavText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primaryDark,
   },
   summaryWrap: {
     flexDirection: "row",
@@ -667,20 +630,15 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#6b7280",
   },
   mapCard: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.surfaceMuted,
     padding: 16,
   },
   mapIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.infoBg,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -688,12 +646,10 @@ const styles = StyleSheet.create({
   mapTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: COLORS.text,
     marginBottom: 6,
   },
   mapSubtitle: {
     fontSize: 14,
-    color: COLORS.textMuted,
     marginBottom: 8,
   },
   mediaBlock: {
@@ -703,24 +659,20 @@ const styles = StyleSheet.create({
   mediaImage: {
     width: "100%",
     height: 240,
-    borderRadius: RADIUS.lg,
     marginBottom: 8,
   },
   mediaName: {
     fontSize: 13,
-    color: COLORS.textMuted,
     fontWeight: "600",
     marginBottom: 4,
   },
   tapHint: {
     fontSize: 12,
-    color: COLORS.primaryDark,
     fontWeight: "700",
   },
   reasonTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: COLORS.textMuted,
     marginTop: 8,
     marginBottom: 6,
     textTransform: "uppercase",
@@ -728,13 +680,11 @@ const styles = StyleSheet.create({
   },
   reasonItem: {
     fontSize: 14,
-    color: COLORS.text,
     marginBottom: 6,
   },
   quickTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: COLORS.textMuted,
     marginBottom: 8,
     textTransform: "uppercase",
     letterSpacing: 0.4,
@@ -742,11 +692,10 @@ const styles = StyleSheet.create({
   quickWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: SPACING.xs,
+    marginBottom: 6,
   },
   quickHint: {
     fontSize: 13,
-    color: COLORS.textMuted,
     marginBottom: 12,
     lineHeight: 19,
   },
@@ -760,7 +709,6 @@ const styles = StyleSheet.create({
   fullscreenImage: {
     width: "100%",
     height: "85%",
-    borderRadius: 16,
   },
   closeButton: {
     position: "absolute",
@@ -770,7 +718,6 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.15)",
     alignItems: "center",
     justifyContent: "center",
   },

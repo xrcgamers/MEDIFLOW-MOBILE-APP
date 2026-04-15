@@ -1,66 +1,68 @@
-import { Pressable, Text, StyleSheet } from "react-native";
-import { COLORS, RADIUS, SHADOW, SPACING } from "../constants/theme";
+import { Pressable, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { useAppTheme } from "../context/ThemeContext";
 
 export default function AppButton({
   title,
   onPress,
   variant = "primary",
   disabled = false,
+  loading = false,
+  accessibilityLabel,
 }) {
+  const { colors, radius, shadow } = useAppTheme();
+
+  const isPrimary = variant === "primary";
+
   return (
     <Pressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityState={{ disabled: disabled || loading }}
       style={({ pressed }) => [
         styles.button,
-        variant === "secondary" ? styles.secondaryButton : styles.primaryButton,
-        disabled && styles.disabledButton,
-        pressed && !disabled && styles.pressedButton,
+        {
+          backgroundColor: isPrimary ? colors.primary : colors.surfaceMuted,
+          borderColor: isPrimary ? colors.primary : colors.border,
+          borderRadius: radius.lg,
+          opacity: disabled ? 0.55 : pressed ? 0.9 : 1,
+          minHeight: 48,
+        },
+        shadow,
       ]}
-      onPress={onPress}
-      disabled={disabled}
     >
-      <Text
-        style={[
-          styles.buttonText,
-          variant === "secondary" ? styles.secondaryText : styles.primaryText,
-        ]}
-      >
-        {title}
-      </Text>
+      {loading ? (
+        <ActivityIndicator color={isPrimary ? "#ffffff" : colors.primaryDark} />
+      ) : (
+        <Text
+          style={[
+            styles.text,
+            {
+              color: isPrimary ? "#ffffff" : colors.primaryDark,
+            },
+          ]}
+          maxFontSizeMultiplier={1.6}
+        >
+          {title}
+        </Text>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: RADIUS.md,
-    marginTop: SPACING.sm,
-    ...SHADOW.card,
-  },
-  primaryButton: {
-    backgroundColor: COLORS.primary,
-  },
-  secondaryButton: {
-    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginBottom: 10,
   },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  pressedButton: {
-    transform: [{ scale: 0.985 }],
-  },
-  buttonText: {
-    textAlign: "center",
-    fontWeight: "700",
+  text: {
     fontSize: 15,
-  },
-  primaryText: {
-    color: "#ffffff",
-  },
-  secondaryText: {
-    color: COLORS.secondary,
+    fontWeight: "800",
+    textAlign: "center",
   },
 });

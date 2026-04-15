@@ -1,97 +1,195 @@
+import { ScrollView, Text, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { ScrollView, Text, StyleSheet } from "react-native";
-import FormSection from "../src/components/FormSection";
+import { Ionicons } from "@expo/vector-icons";
 import AppButton from "../src/components/AppButton";
-import StatusBadge from "../src/components/StatusBadge";
+import FormSection from "../src/components/FormSection";
+import PageHeader from "../src/components/PageHeader";
+import { useAppTheme } from "../src/context/ThemeContext";
+
+function getStatusType(status) {
+  switch (status) {
+    case "Accepted":
+    case "Closed":
+      return "success";
+    case "Under Review":
+    case "Response In Progress":
+    case "Duplicate":
+      return "warning";
+    case "Received":
+      return "info";
+    case "Rejected":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
 
 export default function ReportSuccessScreen() {
+  const { colors, radius, spacing, shadow, typography } = useAppTheme();
   const params = useLocalSearchParams();
 
-  const trackingCode = params.trackingCode || "MDF-000000";
+  const trackingCode = params.trackingCode || "Not available";
   const status = params.status || "Received";
-  const incidentType = params.incidentType || "Unknown";
-  const location = params.location || "Location not available";
+  const incidentType = params.incidentType || "Not available";
+  const location = params.location || "Not available";
+
+  const statusTheme =
+    getStatusType(status) === "success"
+      ? { bg: colors.successBg, text: colors.successText }
+      : getStatusType(status) === "warning"
+      ? { bg: colors.warningBg, text: colors.warningText }
+      : getStatusType(status) === "danger"
+      ? { bg: colors.dangerBg, text: colors.dangerText }
+      : { bg: colors.infoBg, text: colors.infoText };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Report Submitted</Text>
-      <Text style={styles.helperText}>
-        Your emergency report was received successfully.
-      </Text>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: colors.background, padding: spacing.lg },
+      ]}
+    >
+      <View
+        style={[
+          styles.hero,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
+            padding: spacing.lg,
+          },
+          shadow,
+        ]}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: colors.successBg }]}>
+          <Ionicons name="checkmark-circle-outline" size={44} color={colors.successText} />
+        </View>
 
-      <FormSection title="Submission Summary">
-        <Text style={styles.label}>Tracking Code</Text>
-        <Text style={styles.value}>{trackingCode}</Text>
+        <PageHeader
+          eyebrow="Report Submitted"
+          title="Emergency Report Received"
+          subtitle="Your report has been saved successfully. Keep your tracking code to follow updates."
+          icon="shield-checkmark-outline"
+        />
 
-        <Text style={styles.label}>Incident Type</Text>
-        <Text style={styles.info}>{incidentType}</Text>
+        <View
+          style={[
+            styles.statusPill,
+            {
+              backgroundColor: statusTheme.bg,
+              borderRadius: radius.pill,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.statusText, { color: statusTheme.text }]}
+            maxFontSizeMultiplier={1.6}
+          >
+            {status}
+          </Text>
+        </View>
+      </View>
 
-        <Text style={styles.label}>Location</Text>
-        <Text style={styles.info}>{location}</Text>
+      <FormSection title="Tracking Details">
+        <Text
+          style={[styles.label, typography.label, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          Tracking Code
+        </Text>
+        <Text
+          style={[styles.trackingCode, { color: colors.primaryDark }]}
+          maxFontSizeMultiplier={1.4}
+        >
+          {trackingCode}
+        </Text>
 
-        <Text style={styles.label}>Current Status</Text>
-        <StatusBadge label={status} type="info" />
-      </FormSection>
+        <Text
+          style={[styles.label, typography.label, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          Incident Type
+        </Text>
+        <Text
+          style={[styles.value, typography.body, { color: colors.text }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          {incidentType}
+        </Text>
 
-      <FormSection title="What Next?">
-        <Text style={styles.info}>
-          Keep your tracking code safe. Use it to follow report progress. If the
-          situation changes, hospital staff may update the public status.
+        <Text
+          style={[styles.label, typography.label, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          Location
+        </Text>
+        <Text
+          style={[styles.value, typography.body, { color: colors.text }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          {location}
         </Text>
       </FormSection>
 
-      <AppButton
-        title="Track This Report"
-        onPress={() =>
-          router.push({
-            pathname: "/track",
-            params: { trackingCode },
-          })
-        }
-      />
-
-      <AppButton
-        title="Back to Home"
-        onPress={() => router.replace("/")}
-        variant="secondary"
-      />
+      <FormSection title="Next Actions">
+        <AppButton
+          title="Track This Report"
+          onPress={() =>
+            router.push({
+              pathname: "/track",
+              params: { trackingCode },
+            })
+          }
+        />
+        <AppButton
+          title="Report Another Emergency"
+          onPress={() => router.replace("/report")}
+          variant="secondary"
+        />
+        <AppButton
+          title="Back to Home"
+          onPress={() => router.replace("/")}
+          variant="secondary"
+        />
+      </FormSection>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
-    backgroundColor: "#f9fafb",
     flexGrow: 1,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 8,
+  hero: {
+    borderWidth: 1,
+    marginBottom: 16,
+    alignItems: "center",
   },
-  helperText: {
-    fontSize: 14,
-    color: "#555",
-    marginBottom: 20,
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  statusPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginTop: 8,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: "800",
   },
   label: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 6,
-    marginTop: 10,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  value: {
+  trackingCode: {
     fontSize: 24,
-    fontWeight: "800",
-    color: "#2563eb",
+    fontWeight: "900",
     marginBottom: 8,
   },
-  info: {
-    fontSize: 15,
-    color: "#374151",
-    lineHeight: 22,
-  },
+  value: {},
 });

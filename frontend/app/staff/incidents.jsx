@@ -21,8 +21,8 @@ import PageHeader from "../../src/components/PageHeader";
 import BackNavButton from "../../src/components/BackNavButton";
 import { getIncidentsService } from "../../src/services/staffIncidentService";
 import { API_ROOT_URL } from "../../src/config/api";
-import { COLORS, RADIUS, SPACING } from "../../src/constants/theme";
 import { computeIncidentPriority } from "../../src/utils/priority";
+import { useAppTheme } from "../../src/context/ThemeContext";
 
 const AUTO_REFRESH_INTERVAL = 15000;
 const NEW_REPORT_BANNER_DURATION = 5000;
@@ -51,16 +51,11 @@ function sortIncidents(incidents, sortOption) {
 
   switch (sortOption) {
     case "Oldest First":
-      return sorted.sort(
-        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-      );
-
+      return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     case "Highest Victims":
       return sorted.sort((a, b) => b.victimCount - a.victimCount);
-
     case "Lowest Victims":
       return sorted.sort((a, b) => a.victimCount - b.victimCount);
-
     case "Highest Priority":
       return sorted.sort((a, b) => {
         if ((b.priorityScore || 0) !== (a.priorityScore || 0)) {
@@ -68,7 +63,6 @@ function sortIncidents(incidents, sortOption) {
         }
         return new Date(b.createdAt) - new Date(a.createdAt);
       });
-
     case "Lowest Priority":
       return sorted.sort((a, b) => {
         if ((a.priorityScore || 0) !== (b.priorityScore || 0)) {
@@ -76,23 +70,19 @@ function sortIncidents(incidents, sortOption) {
         }
         return new Date(b.createdAt) - new Date(a.createdAt);
       });
-
     case "Newest First":
     default:
-      return sorted.sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
+      return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 }
 
 export default function IncidentsScreen() {
+  const { colors, spacing, typography, radius } = useAppTheme();
   const params = useLocalSearchParams();
 
   const [selectedFilter, setSelectedFilter] = useState(params.status || "All");
   const [selectedSort, setSelectedSort] = useState("Newest First");
-  const [selectedPriority, setSelectedPriority] = useState(
-    params.priority || "All"
-  );
+  const [selectedPriority, setSelectedPriority] = useState(params.priority || "All");
   const [searchQuery, setSearchQuery] = useState("");
   const [incidents, setIncidents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -168,8 +158,7 @@ export default function IncidentsScreen() {
           selectedFilter === "All" || incident.status === selectedFilter;
 
         const matchesPriority =
-          selectedPriority === "All" ||
-          incident.priorityLevel === selectedPriority;
+          selectedPriority === "All" || incident.priorityLevel === selectedPriority;
 
         const matchesTriageUrgency =
           !activeTriageUrgencyFilter ||
@@ -217,18 +206,6 @@ export default function IncidentsScreen() {
     setSearchQuery("");
   };
 
-  const handleGoToHome = () => {
-    router.push("/staff");
-  };
-
-  const handleGoToTriage = () => {
-    router.push("/staff/triage");
-  };
-
-  const handleGoToResources = () => {
-    router.push("/staff/resources");
-  };
-
   const bannerLabel =
     newReportCount === 1
       ? "1 new report received"
@@ -242,7 +219,7 @@ export default function IncidentsScreen() {
 
   return (
     <>
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <FlatList
           data={isLoading ? [] : filteredIncidents}
           keyExtractor={(item) => item.id}
@@ -270,61 +247,92 @@ export default function IncidentsScreen() {
 
               <FormSection title="Quick Navigation">
                 <View style={styles.quickNavWrap}>
-                  <Pressable style={styles.quickNavButton} onPress={handleGoToHome}>
-                    <Ionicons
-                      name="home-outline"
-                      size={18}
-                      color={COLORS.primaryDark}
-                      style={styles.quickNavIcon}
-                    />
-                    <Text style={styles.quickNavText}>Staff Home</Text>
-                  </Pressable>
-
-                  <Pressable style={styles.quickNavButton} onPress={handleGoToTriage}>
-                    <Ionicons
-                      name="pulse-outline"
-                      size={18}
-                      color={COLORS.primaryDark}
-                      style={styles.quickNavIcon}
-                    />
-                    <Text style={styles.quickNavText}>Open Triage</Text>
-                  </Pressable>
-
-                  <Pressable style={styles.quickNavButton} onPress={handleGoToResources}>
-                    <Ionicons
-                      name="layers-outline"
-                      size={18}
-                      color={COLORS.primaryDark}
-                      style={styles.quickNavIcon}
-                    />
-                    <Text style={styles.quickNavText}>Resources</Text>
-                  </Pressable>
+                  {[
+                    { label: "Staff Home", icon: "home-outline", route: "/staff" },
+                    { label: "Open Triage", icon: "pulse-outline", route: "/staff/triage" },
+                    { label: "Resources", icon: "layers-outline", route: "/staff/resources" },
+                    { label: "Settings", icon: "settings-outline", route: "/staff/settings" },
+                  ].map((item) => (
+                    <Pressable
+                      key={item.route}
+                      style={[
+                        styles.quickNavButton,
+                        {
+                          backgroundColor: colors.surfaceMuted,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                      onPress={() => router.push(item.route)}
+                    >
+                      <Ionicons
+                        name={item.icon}
+                        size={18}
+                        color={colors.primaryDark}
+                        style={styles.quickNavIcon}
+                      />
+                      <Text
+                        style={[
+                          typography.label,
+                          { color: colors.primaryDark },
+                        ]}
+                        maxFontSizeMultiplier={1.7}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
               </FormSection>
 
               {activeTriageUrgencyFilter ? (
-                <View style={styles.filterBanner}>
+                <View
+                  style={[
+                    styles.filterBanner,
+                    {
+                      backgroundColor: colors.surfaceMuted,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                    },
+                  ]}
+                >
                   <Ionicons
                     name="funnel-outline"
                     size={18}
-                    color={COLORS.primaryDark}
+                    color={colors.primaryDark}
                     style={styles.bannerIcon}
                   />
-                  <Text style={styles.filterBannerText}>
+                  <Text
+                    style={[typography.body, { color: colors.text }]}
+                    maxFontSizeMultiplier={1.8}
+                  >
                     Filtered to triage urgency: {activeTriageUrgencyFilter}
                   </Text>
                 </View>
               ) : null}
 
               {showNewReportBanner ? (
-                <View style={styles.banner}>
+                <View
+                  style={[
+                    styles.banner,
+                    {
+                      backgroundColor: colors.infoBg,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                    },
+                  ]}
+                >
                   <Ionicons
                     name="notifications"
                     size={18}
-                    color={COLORS.primaryDark}
+                    color={colors.primaryDark}
                     style={styles.bannerIcon}
                   />
-                  <Text style={styles.bannerText}>{bannerLabel}</Text>
+                  <Text
+                    style={[typography.body, { color: colors.primaryDark, fontWeight: "700" }]}
+                    maxFontSizeMultiplier={1.8}
+                  >
+                    {bannerLabel}
+                  </Text>
                 </View>
               ) : null}
 
@@ -361,23 +369,44 @@ export default function IncidentsScreen() {
                 />
 
                 {hasActiveRouteFilters ? (
-                  <Pressable style={styles.clearButton} onPress={handleClearFilters}>
+                  <Pressable
+                    style={[
+                      styles.clearButton,
+                      {
+                        borderRadius: radius.md,
+                        backgroundColor: colors.infoBg,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={handleClearFilters}
+                  >
                     <Ionicons
                       name="close-circle-outline"
                       size={18}
-                      color={COLORS.primaryDark}
+                      color={colors.primaryDark}
                       style={styles.clearIcon}
                     />
-                    <Text style={styles.clearText}>Clear active filters</Text>
+                    <Text
+                      style={[typography.label, { color: colors.primaryDark }]}
+                      maxFontSizeMultiplier={1.7}
+                    >
+                      Clear active filters
+                    </Text>
                   </Pressable>
                 ) : null}
               </FormSection>
 
               <View style={styles.headerInfo}>
-                <Text style={styles.refreshHint}>
+                <Text
+                  style={[styles.refreshHint, { color: colors.textMuted }]}
+                  maxFontSizeMultiplier={1.7}
+                >
                   Auto-refreshes every 15 seconds
                 </Text>
-                <Text style={styles.lastRefreshed}>
+                <Text
+                  style={[styles.lastRefreshed, { color: colors.textMuted }]}
+                  maxFontSizeMultiplier={1.7}
+                >
                   Last refreshed:{" "}
                   {lastRefreshed
                     ? lastRefreshed.toLocaleTimeString([], {
@@ -391,7 +420,12 @@ export default function IncidentsScreen() {
 
               {isLoading ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>Loading reports...</Text>
+                  <Text
+                    style={[typography.body, { color: colors.textMuted }]}
+                    maxFontSizeMultiplier={1.8}
+                  >
+                    Loading reports...
+                  </Text>
                 </View>
               ) : null}
             </>
@@ -399,7 +433,10 @@ export default function IncidentsScreen() {
           ListEmptyComponent={
             !isLoading ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>
+                <Text
+                  style={[typography.body, { color: colors.textMuted }]}
+                  maxFontSizeMultiplier={1.8}
+                >
                   No reports found for the current search or filter.
                 </Text>
               </View>
@@ -418,7 +455,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     paddingBottom: 110,
-    backgroundColor: COLORS.background,
   },
   listContent: {
     paddingBottom: 20,
@@ -430,22 +466,16 @@ const styles = StyleSheet.create({
   quickNavButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
+    borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
+    marginRight: 10,
+    marginBottom: 10,
+    minHeight: 44,
   },
   quickNavIcon: {
     marginRight: 6,
-  },
-  quickNavText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primaryDark,
   },
   headerInfo: {
     marginBottom: 10,
@@ -453,10 +483,7 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.infoBg,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginBottom: 14,
@@ -464,26 +491,13 @@ const styles = StyleSheet.create({
   filterBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginBottom: 14,
   },
   bannerIcon: {
     marginRight: 8,
-  },
-  bannerText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.primaryDark,
-  },
-  filterBannerText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.text,
   },
   clearButton: {
     marginTop: 8,
@@ -492,36 +506,22 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.infoBg,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   clearIcon: {
     marginRight: 6,
-  },
-  clearText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primaryDark,
   },
   emptyState: {
     paddingVertical: 24,
     alignItems: "center",
   },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
   refreshHint: {
     fontSize: 12,
-    color: COLORS.textMuted,
     textAlign: "center",
     marginBottom: 4,
   },
   lastRefreshed: {
     fontSize: 12,
-    color: COLORS.textMuted,
     textAlign: "center",
     marginBottom: 6,
   },

@@ -10,7 +10,8 @@ import TimelineItem from "../src/components/TimelineItem";
 import StatusBadge from "../src/components/StatusBadge";
 import PageHeader from "../src/components/PageHeader";
 import BackNavButton from "../src/components/BackNavButton";
-import { COLORS, RADIUS } from "../src/constants/theme";
+import ThemeModeToggle from "../src/components/ThemeModeToggle";
+import { useAppTheme } from "../src/context/ThemeContext";
 
 function getTrackingStatusType(status) {
   switch (status) {
@@ -31,7 +32,9 @@ function getTrackingStatusType(status) {
 }
 
 export default function TrackScreen() {
+  const { colors, radius, spacing, typography } = useAppTheme();
   const params = useLocalSearchParams();
+
   const [trackingCode, setTrackingCode] = useState(params.trackingCode || "");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [trackingResult, setTrackingResult] = useState(null);
@@ -70,7 +73,12 @@ export default function TrackScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: colors.background, padding: spacing.lg },
+      ]}
+    >
       <BackNavButton label="Back to Home" fallbackRoute="/" />
 
       <PageHeader
@@ -79,6 +87,16 @@ export default function TrackScreen() {
         subtitle="Enter your tracking code to follow the current report progress."
         icon="locate-outline"
       />
+
+      <FormSection title="Appearance">
+        <ThemeModeToggle />
+        <Text
+          style={[styles.helperText, typography.body, { color: colors.textMuted, marginTop: spacing.sm }]}
+          maxFontSizeMultiplier={1.8}
+        >
+          Choose the appearance mode you prefer.
+        </Text>
+      </FormSection>
 
       <FormSection title="Tracking Details">
         <FormInput
@@ -108,18 +126,42 @@ export default function TrackScreen() {
       {trackingResult ? (
         <>
           <FormSection title="Report Summary">
-            <Text style={styles.summaryLabel}>Tracking Code</Text>
-            <Text style={styles.summaryValue}>
+            <Text
+              style={[styles.summaryLabel, typography.label, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.6}
+            >
+              Tracking Code
+            </Text>
+            <Text
+              style={[styles.summaryValue, { color: colors.primaryDark }]}
+              maxFontSizeMultiplier={1.4}
+            >
               {trackingResult.trackingCode || trackingCode}
             </Text>
 
-            <Text style={styles.summaryLabel}>Incident Type</Text>
-            <Text style={styles.summaryText}>
+            <Text
+              style={[styles.summaryLabel, typography.label, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.6}
+            >
+              Incident Type
+            </Text>
+            <Text
+              style={[styles.summaryText, typography.body, { color: colors.text }]}
+              maxFontSizeMultiplier={1.8}
+            >
               {trackingResult.incidentType || "Not available"}
             </Text>
 
-            <Text style={styles.summaryLabel}>Last Updated</Text>
-            <Text style={styles.summaryText}>
+            <Text
+              style={[styles.summaryLabel, typography.label, { color: colors.textMuted }]}
+              maxFontSizeMultiplier={1.6}
+            >
+              Last Updated
+            </Text>
+            <Text
+              style={[styles.summaryText, typography.body, { color: colors.text }]}
+              maxFontSizeMultiplier={1.8}
+            >
               {trackingResult.lastUpdatedAt
                 ? new Date(trackingResult.lastUpdatedAt).toLocaleString()
                 : "Not available"}
@@ -130,8 +172,17 @@ export default function TrackScreen() {
             <FormSection title="Captured Evidence">
               {trackingResult.media.map((item) => (
                 <View key={item.id} style={styles.mediaBlock}>
-                  <Image source={{ uri: item.url }} style={styles.mediaImage} />
-                  <Text style={styles.mediaName}>{item.fileName}</Text>
+                  <Image
+                    source={{ uri: item.url }}
+                    style={[styles.mediaImage, { borderRadius: radius.lg }]}
+                    accessibilityLabel="Tracked evidence image"
+                  />
+                  <Text
+                    style={[styles.mediaName, typography.body, { color: colors.textMuted }]}
+                    maxFontSizeMultiplier={1.8}
+                  >
+                    {item.fileName}
+                  </Text>
                 </View>
               ))}
             </FormSection>
@@ -154,7 +205,12 @@ export default function TrackScreen() {
                 />
               ))
             ) : (
-              <Text style={styles.emptyText}>No timeline updates available.</Text>
+              <Text
+                style={[styles.emptyText, typography.body, { color: colors.textMuted }]}
+                maxFontSizeMultiplier={1.8}
+              >
+                No timeline updates available.
+              </Text>
             )}
           </FormSection>
         </>
@@ -165,43 +221,29 @@ export default function TrackScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
-    backgroundColor: COLORS.background,
     flexGrow: 1,
   },
+  helperText: {
+    lineHeight: 22,
+  },
   summaryLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
     marginBottom: 6,
     marginTop: 10,
   },
   summaryValue: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#2563eb",
     marginBottom: 8,
   },
-  summaryText: {
-    fontSize: 15,
-    color: "#374151",
-    lineHeight: 22,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
+  summaryText: {},
+  emptyText: {},
   mediaBlock: {
     marginBottom: 14,
   },
   mediaImage: {
     width: "100%",
     height: 220,
-    borderRadius: RADIUS.lg,
     marginBottom: 8,
   },
-  mediaName: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-  },
+  mediaName: {},
 });

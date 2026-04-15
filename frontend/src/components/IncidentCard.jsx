@@ -1,23 +1,22 @@
 import { View, Text, StyleSheet, Image } from "react-native";
 import AppButton from "./AppButton";
 import StatusBadge from "./StatusBadge";
-import { COLORS, RADIUS, SPACING, SHADOW } from "../constants/theme";
 import { getPriorityType } from "../utils/priority";
+import { useAppTheme } from "../context/ThemeContext";
 
 function getStatusType(status) {
   switch (status) {
     case "Accepted":
+    case "Closed":
       return "success";
     case "Under Review":
+    case "Duplicate":
+    case "Response In Progress":
       return "warning";
     case "Received":
       return "info";
     case "Rejected":
       return "danger";
-    case "Duplicate":
-      return "warning";
-    case "Closed":
-      return "success";
     default:
       return "neutral";
   }
@@ -37,11 +36,36 @@ function getUrgencyType(urgency) {
 }
 
 export default function IncidentCard({ incident, onViewDetails }) {
+  const { colors, radius, spacing, shadow } = useAppTheme();
+
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          marginBottom: spacing.md,
+        },
+        shadow,
+      ]}
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`Incident ${incident.incidentType}, status ${incident.status}`}
+    >
       <View style={styles.topRow}>
-        <Text style={styles.title}>{incident.incidentType}</Text>
-        <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
+        <Text
+          style={[styles.title, { color: colors.text }]}
+          maxFontSizeMultiplier={1.5}
+        >
+          {incident.incidentType}
+        </Text>
+        <StatusBadge
+          label={incident.status}
+          type={getStatusType(incident.status)}
+        />
       </View>
 
       <View style={styles.badgeRow}>
@@ -61,18 +85,44 @@ export default function IncidentCard({ incident, onViewDetails }) {
       </View>
 
       {incident.evidenceImageUrl ? (
-        <Image source={{ uri: incident.evidenceImageUrl }} style={styles.thumbnail} />
+        <Image
+          source={{ uri: incident.evidenceImageUrl }}
+          style={[styles.thumbnail, { borderRadius: radius.md }]}
+          accessibilityLabel="Incident evidence image"
+        />
       ) : (
-        <View style={styles.noImageBox}>
-          <Text style={styles.noImageText}>No evidence photo</Text>
+        <View
+          style={[
+            styles.noImageBox,
+            {
+              borderRadius: radius.md,
+              backgroundColor: colors.surfaceMuted,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.noImageText, { color: colors.textMuted }]}
+            maxFontSizeMultiplier={1.5}
+          >
+            No evidence photo
+          </Text>
         </View>
       )}
 
-      <Text style={styles.meta}>Tracking Code: {incident.trackingCode}</Text>
-      <Text style={styles.meta}>Location: {incident.location}</Text>
-      <Text style={styles.meta}>Victims: {incident.victims}</Text>
-      <Text style={styles.meta}>Reported At: {incident.reportedAt}</Text>
-      <Text style={styles.meta}>
+      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+        Tracking Code: {incident.trackingCode}
+      </Text>
+      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+        Location: {incident.location}
+      </Text>
+      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+        Victims: {incident.victims}
+      </Text>
+      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+        Reported At: {incident.reportedAt}
+      </Text>
+      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
         Evidence: {incident.mediaCount > 0 ? `${incident.mediaCount} file(s)` : "None"}
       </Text>
 
@@ -80,6 +130,7 @@ export default function IncidentCard({ incident, onViewDetails }) {
         title="View Details"
         onPress={() => onViewDetails(incident)}
         variant="secondary"
+        accessibilityLabel={`View details for ${incident.incidentType}`}
       />
     </View>
   );
@@ -87,53 +138,40 @@ export default function IncidentCard({ incident, onViewDetails }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    ...SHADOW.card,
   },
   topRow: {
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   title: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 6,
-    color: COLORS.text,
   },
   thumbnail: {
     width: "100%",
     height: 160,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   noImageBox: {
     height: 70,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surfaceMuted,
     borderWidth: 1,
-    borderColor: COLORS.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
   },
   noImageText: {
     fontSize: 13,
-    color: COLORS.textMuted,
     fontWeight: "600",
   },
   meta: {
     fontSize: 14,
-    color: "#374151",
     marginBottom: 6,
     marginTop: 2,
   },
