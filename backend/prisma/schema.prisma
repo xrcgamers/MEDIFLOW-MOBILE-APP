@@ -7,121 +7,518 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model StaffUser {
-  id           String            @id @default(cuid())
-  name         String
-  email        String            @unique
-  staffId      String            @unique
-  role         String
-  passwordHash String
-  isActive     Boolean           @default(true)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  reportLogs   StaffActionLog[]
-  resourceLogs ResourceActionLog[]
+enum ResourceRequestStatus {
+  REQUESTED
+  APPROVED
+  PARTIALLY_ALLOCATED
+  RESERVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  CANCELLED
+  DELAYED
 }
 
-model Report {
-  id                   String                @id @default(cuid())
-  trackingCode         String                @unique
+enum AllocationStatus {
+  ACTIVE
+  RELEASED
+  CANCELLED
+}
+
+model Incident {
+  id                   String   @id @default(cuid())
+  trackingCode         String   @unique
   incidentType         String
+  subIncidentType      String?
   otherIncidentType    String?
-  resolvedIncidentType String
+  resolvedIncidentType String?
   autoLocationText     String?
   manualLocationText   String?
-  resolvedLocationText String
+  resolvedLocationText String?
   latitude             Float?
   longitude            Float?
-  victimCount          Int
-  phoneNumber          String?
+  estimatedVictimCount Int      @default(1)
+  phoneNumber          String
   notes                String?
-  mediaCount           Int                   @default(0)
-  status               String
-  source               String                @default("Public Report")
-  staffNote            String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-
-  statusHistory        ReportStatusHistory[]
-  triageAssessments    TriageAssessment[]
-  mediaAttachments     MediaAttachment[]
-  staffLogs            StaffActionLog[]
-}
-
-model ReportStatusHistory {
-  id        String   @id @default(cuid())
-  reportId   String
-  label      String
-  createdAt  DateTime @default(now())
-
-  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-}
-
-model TriageAssessment {
-  id                   String   @id @default(cuid())
-  reportId             String?
-  unconscious          Boolean  @default(false)
-  notBreathingNormally Boolean  @default(false)
-  severeBleeding       Boolean  @default(false)
-  multipleVictims      Boolean  @default(false)
-  painScore            Int?
-  score                Int
-  urgency              String
-  advisory             String
-  reasons              String[]
+  status               String   @default("RECEIVED")
+  publicStatusNote     String?
+  rejectionReason      String?
   createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  report               Report?  @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  mediaAttachments      MediaAttachment[]
+  statusHistory         IncidentStatusHistory[]
+  patients              Patient[]
+  aiAssessment          AiPriorityAssessment?
+  queuePriority         IncidentQueuePriority?
+  communicationThreads  CommunicationThread[]
+  auditLogs             AuditLog[]
+  systemAlerts          SystemAlert[]
+  resourceRequests      ResourceRequest[]
+  patientTriages        PatientTriage[]
+  patientCareUpdates    PatientCareUpdate[]
+  patientTimelineEvents PatientTimelineEvent[]
+
+  @@index([trackingCode])
+  @@index([status])
+  @@index([createdAt])
 }
 
-model ResourceItem {
-  id          String              @id @default(cuid())
-  category    String
-  label       String
-  value       String
-  status      String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+model IncidentStatusHistory {
+  id              String   @id @default(cuid())
+  incidentId      String
+  status          String
+  note            String?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
 
-  actionLogs  ResourceActionLog[]
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@index([createdAt])
 }
 
 model MediaAttachment {
   id         String   @id @default(cuid())
-  reportId    String
-  fileName    String
-  filePath    String
-  mimeType    String?
-  fileSize    Int?
+  incidentId String
+  filePath   String
+  mimeType   String?
+  fileSize   Int?
+  createdAt  DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+}
+
+model Patient {
+  id              String   @id @default(cuid())
+  incidentId      String
+  patientCode     String   @unique
+  fullName        String?
+  sex             String?
+  estimatedAge    Int?
+  isPlaceholder   Boolean  @default(true)
+  isExcluded      Boolean  @default(false)
+  exclusionReason String?
+  exclusionNote   String?
+  status          String   @default("UNTRIAGED")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  incident             Incident               @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  triages              PatientTriage[]
+  careUpdates          PatientCareUpdate[]
+  timelineEvents       PatientTimelineEvent[]
+  resourceRequests     ResourceRequest[]
+  auditLogs            AuditLog[]
+  systemAlerts         SystemAlert[]
+  communicationThreads CommunicationThread[]
+  resourceStatusEvents ResourceStatusEvent[]
+
+  @@index([incidentId])
+  @@index([patientCode])
+  @@index([status])
+}
+
+model PatientTriage {
+  id                     String   @id @default(cuid())
+  patientId              String
+  incidentId             String
+  unconscious            Boolean  @default(false)
+  notBreathingNormally   Boolean  @default(false)
+  severeBleeding         Boolean  @default(false)
+  painScore              Int?
+  multipleVictimsContext Boolean  @default(false)
+  triageScore            Int
+  urgencyLevel           String
+  advisory               String
+  reasons                String[]
+  note                   String?
+  createdByUserId        String?
+  createdAt              DateTime @default(now())
+
+  patient       Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  incident      Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  createdByUser StaffUser? @relation("StaffUserCreatedTriages", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([incidentId])
+  @@index([urgencyLevel])
+  @@index([createdAt])
+}
+
+model PatientCareUpdate {
+  id              String   @id @default(cuid())
+  patientId       String
+  incidentId      String
+  updateType      String
+  note            String
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  patient       Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  incident      Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  createdByUser StaffUser? @relation("StaffUserCreatedCareUpdates", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([incidentId])
+  @@index([createdAt])
+}
+
+model PatientTimelineEvent {
+  id          String   @id @default(cuid())
+  patientId   String
+  incidentId  String
+  eventLabel  String
+  eventStatus String?
+  note        String?
   createdAt   DateTime @default(now())
 
-  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([incidentId])
+  @@index([createdAt])
 }
 
-model StaffActionLog {
-  id          String     @id @default(cuid())
-  reportId     String
-  actionType   String
-  status       String?
-  note         String?
-  actorName    String?
-  actorUserId  String?
-  createdAt    DateTime  @default(now())
+model AiPriorityAssessment {
+  id                    String   @id @default(cuid())
+  incidentId            String   @unique
+  priorityLevel         String
+  confidence            Int
+  keyRiskFactors        String[]
+  recommendedNextAction String
+  handoverSummary       String
+  analysisBasis         String
+  imageUsed             Boolean  @default(false)
+  rawModelOutput        Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  report       Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  actorUser    StaffUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([priorityLevel])
 }
 
-model ResourceActionLog {
-  id          String     @id @default(cuid())
-  resourceId   String
-  actionType   String
-  note         String?
-  actorName    String?
-  actorUserId  String?
-  createdAt    DateTime  @default(now())
+model IncidentQueuePriority {
+  id                     String    @id @default(cuid())
+  incidentId             String    @unique
+  aiRankScore            Float
+  finalPriorityScore     Float
+  finalPriorityLevel     String
+  manualOverrideRank     Int?
+  manualOverrideReason   String?
+  manualOverrideByUserId String?
+  lastReorderedAt        DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  resource     ResourceItem @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  actorUser    StaffUser?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  incident             Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  manualOverrideByUser StaffUser? @relation("StaffUserQueueOverrides", fields: [manualOverrideByUserId], references: [id], onDelete: SetNull)
+
+  @@index([finalPriorityLevel])
+  @@index([manualOverrideRank])
+}
+
+model ResourceCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  items    ResourceItem[]
+  requests ResourceRequest[]
+}
+
+model ResourceItem {
+  id                String   @id @default(cuid())
+  categoryId        String
+  label             String
+  subType           String?
+  status            String   @default("AVAILABLE")
+  currentQuantity   Int?
+  availableQuantity Int?
+  unitOfMeasure     String?
+  location          String?
+  managedByRole     String?
+  lastUpdatedAt     DateTime @updatedAt
+  createdAt         DateTime @default(now())
+
+  category           ResourceCategory      @relation(fields: [categoryId], references: [id])
+  allocations        ResourceAllocation[]
+  statusEvents       ResourceStatusEvent[]
+  primaryForRequests ResourceRequest[]     @relation("PrimaryNamedResourceItem")
+  auditLogs          AuditLog[]
+  systemAlerts       SystemAlert[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([label])
+  @@index([subType])
+}
+
+model ResourceRequest {
+  id                 String @id @default(cuid())
+  incidentId         String
+  patientId          String
+  resourceCategoryId String
+
+  // Optional: used mainly for named resources such as theatre/imaging.
+  primaryResourceItemId String?
+
+  assignedSectionRole String
+  priority            String?
+  requestReason       String
+  requestStatus       ResourceRequestStatus @default(REQUESTED)
+  rejectionReason     String?
+
+  requestedQuantity     Int?
+  approvedQuantity      Int?
+  fulfilledQuantity     Int     @default(0)
+  unitOfMeasureSnapshot String?
+
+  requestedAt DateTime  @default(now())
+  completedAt DateTime?
+
+  incident             Incident              @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  patient              Patient               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  resourceCategory     ResourceCategory      @relation(fields: [resourceCategoryId], references: [id])
+  primaryResourceItem  ResourceItem?         @relation("PrimaryNamedResourceItem", fields: [primaryResourceItemId], references: [id], onDelete: SetNull)
+  allocations          ResourceAllocation[]
+  auditLogs            AuditLog[]
+  systemAlerts         SystemAlert[]
+  communicationThreads CommunicationThread[]
+
+  @@index([incidentId])
+  @@index([patientId])
+  @@index([resourceCategoryId])
+  @@index([primaryResourceItemId])
+  @@index([assignedSectionRole])
+  @@index([requestStatus])
+  @@index([requestedAt])
+}
+
+model ResourceAllocation {
+  id                String           @id @default(cuid())
+  resourceRequestId String
+  resourceItemId    String
+  allocationStatus  AllocationStatus @default(ACTIVE)
+  allocatedByUserId String?
+
+  // For pooled resources like blood/beds.
+  reservedQuantity      Int?
+  unitOfMeasureSnapshot String?
+
+  allocatedAt   DateTime  @default(now())
+  releasedAt    DateTime?
+  releaseReason String?
+
+  resourceRequest ResourceRequest @relation(fields: [resourceRequestId], references: [id], onDelete: Cascade)
+  resourceItem    ResourceItem    @relation(fields: [resourceItemId], references: [id], onDelete: Cascade)
+  allocatedByUser StaffUser?      @relation("StaffUserCreatedAllocations", fields: [allocatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([resourceRequestId])
+  @@index([resourceItemId])
+  @@index([allocationStatus])
+}
+
+model ResourceStatusEvent {
+  id               String   @id @default(cuid())
+  resourceItemId   String
+  oldStatus        String?
+  newStatus        String
+  relatedPatientId String?
+  changedByUserId  String?
+  note             String?
+  createdAt        DateTime @default(now())
+
+  resourceItem   ResourceItem @relation(fields: [resourceItemId], references: [id], onDelete: Cascade)
+  relatedPatient Patient?     @relation(fields: [relatedPatientId], references: [id], onDelete: SetNull)
+  changedByUser  StaffUser?   @relation("StaffUserChangedResourceStatus", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([resourceItemId])
+  @@index([createdAt])
+}
+
+model StaffRole {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  users StaffUser[]
+}
+
+model StaffUser {
+  id           String   @id @default(cuid())
+  staffId      String   @unique
+  name         String
+  email        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  roleId       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  role                    StaffRole                  @relation(fields: [roleId], references: [id])
+  loginEvents             StaffLoginEvent[]
+  auditLogs               AuditLog[]                 @relation("AuditActor")
+  createdTriages          PatientTriage[]            @relation("StaffUserCreatedTriages")
+  createdCareUpdates      PatientCareUpdate[]        @relation("StaffUserCreatedCareUpdates")
+  createdAllocations      ResourceAllocation[]       @relation("StaffUserCreatedAllocations")
+  changedResourceStatuses ResourceStatusEvent[]      @relation("StaffUserChangedResourceStatus")
+  resolvedAlerts          SystemAlert[]              @relation("ResolvedSystemAlerts")
+  queueOverrides          IncidentQueuePriority[]    @relation("StaffUserQueueOverrides")
+  threadParticipants      CommunicationParticipant[]
+  sentMessages            CommunicationMessage[]     @relation("SentCommunicationMessages")
+
+  @@index([roleId])
+  @@index([isActive])
+}
+
+model StaffLoginEvent {
+  id            String   @id @default(cuid())
+  userId        String?
+  email         String?
+  staffId       String?
+  wasSuccess    Boolean
+  failureReason String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  user StaffUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([wasSuccess])
+}
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  actionType        String
+  actorUserId       String?
+  actorRole         String?
+  incidentId        String?
+  patientId         String?
+  resourceRequestId String?
+  resourceItemId    String?
+  targetTable       String
+  targetId          String
+  oldValue          Json?
+  newValue          Json?
+  reason            String?
+  createdAt         DateTime @default(now())
+
+  actorUser       StaffUser?       @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  incident        Incident?        @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  patient         Patient?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  resourceRequest ResourceRequest? @relation(fields: [resourceRequestId], references: [id], onDelete: SetNull)
+  resourceItem    ResourceItem?    @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([incidentId])
+  @@index([patientId])
+  @@index([resourceRequestId])
+  @@index([resourceItemId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+model SystemAlert {
+  id                String    @id @default(cuid())
+  alertType         String
+  severity          String
+  incidentId        String?
+  patientId         String?
+  resourceRequestId String?
+  resourceItemId    String?
+  message           String
+  status            String    @default("OPEN")
+  resolvedAt        DateTime?
+  resolvedByUserId  String?
+  createdAt         DateTime  @default(now())
+
+  incident        Incident?        @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  patient         Patient?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  resourceRequest ResourceRequest? @relation(fields: [resourceRequestId], references: [id], onDelete: SetNull)
+  resourceItem    ResourceItem?    @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
+  resolvedByUser  StaffUser?       @relation("ResolvedSystemAlerts", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([alertType])
+  @@index([severity])
+  @@index([status])
+  @@index([incidentId])
+  @@index([patientId])
+  @@index([resourceRequestId])
+  @@index([resourceItemId])
+  @@index([createdAt])
+}
+
+model AutomationRule {
+  id                String   @id @default(cuid())
+  ruleCode          String   @unique
+  description       String?
+  severity          String
+  thresholdMinutes  Int?
+  thresholdQuantity Int?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model CommunicationThread {
+  id                String   @id @default(cuid())
+  threadType        String
+  incidentId        String?
+  patientId         String?
+  resourceRequestId String?
+  createdByUserId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  incident        Incident?                  @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  patient         Patient?                   @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  resourceRequest ResourceRequest?           @relation(fields: [resourceRequestId], references: [id], onDelete: SetNull)
+  participants    CommunicationParticipant[]
+  messages        CommunicationMessage[]
+
+  @@index([incidentId])
+  @@index([patientId])
+  @@index([resourceRequestId])
+  @@index([threadType])
+}
+
+model CommunicationParticipant {
+  id        String   @id @default(cuid())
+  threadId  String
+  userId    String
+  role      String?
+  createdAt DateTime @default(now())
+
+  thread CommunicationThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   StaffUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([threadId])
+  @@index([userId])
+}
+
+model CommunicationMessage {
+  id                String   @id @default(cuid())
+  threadId          String
+  senderUserId      String?
+  senderRole        String?
+  messageType       String   @default("INFO")
+  body              String
+  isSystemGenerated Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  thread     CommunicationThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderUser StaffUser?          @relation("SentCommunicationMessages", fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([threadId])
+  @@index([createdAt])
 }

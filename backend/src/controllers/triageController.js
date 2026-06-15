@@ -1,112 +1,229 @@
 const prisma = require("../config/prisma");
+const { createAuditLog } = require("../services/auditService");
+const { resolvePatientTriageDelayAlerts } = require("../services/automationResolutionService");
+const { getIncidentContextRisk } = require("../utils/incidentContextRisk");
 
-function getTriageAssessment(form) {
-  let score = 0;
+function normalizeBoolean(value) {
+  return value === true || value === "true";
+}
+
+function computeTriage({
+  unconscious,
+  notBreathingNormally,
+  severeBleeding,
+  painScore,
+  multipleVictimsContext,
+  incidentType,
+  subIncidentType,
+  estimatedVictimCount,
+}) {
+  let triageScore = 0;
   const reasons = [];
 
-  if (form.unconscious) {
-    score += 4;
-    reasons.push("Patient is unconscious");
+  if (unconscious) {
+    triageScore += 50;
+    reasons.push("Patient reported as unconscious.");
   }
 
-  if (form.notBreathingNormally) {
-    score += 4;
-    reasons.push("Breathing is abnormal");
+  if (notBreathingNormally) {
+    triageScore += 50;
+    reasons.push("Patient is not breathing normally.");
   }
 
-  if (form.severeBleeding) {
-    score += 3;
-    reasons.push("Severe bleeding detected");
+  if (severeBleeding) {
+    triageScore += 35;
+    reasons.push("Severe bleeding reported.");
   }
 
-  if (Number(form.painScore) >= 8) {
-    score += 2;
-    reasons.push("Very high pain score");
+  if (typeof painScore === "number" && !Number.isNaN(painScore)) {
+    triageScore += Math.min(10, Math.max(0, painScore));
+    if (painScore >= 7) {
+      reasons.push("High pain score reported.");
+    }
   }
 
-  if (form.multipleVictims) {
-    score += 1;
-    reasons.push("Multiple casualty context");
+  if (multipleVictimsContext) {
+    triageScore += 10;
+    reasons.push("Patient is part of a multiple casualty incident.");
   }
 
-  let urgency = "Low";
-  let advisory = "Continue monitoring and queue for standard review.";
+  const contextRisk = getIncidentContextRisk(
+    incidentType,
+    subIncidentType,
+    estimatedVictimCount
+  );
 
-  if (score >= 8) {
-    urgency = "Critical";
-    advisory =
-      "Immediate attention required. Prioritize resuscitation and senior review.";
-  } else if (score >= 5) {
-    urgency = "High";
-    advisory = "Urgent assessment required. Move patient up the queue.";
-  } else if (score >= 3) {
-    urgency = "Moderate";
-    advisory = "Prompt clinical review recommended.";
+  triageScore += contextRisk.bonus;
+  reasons.push(...contextRisk.reasons);
+
+  let urgencyLevel = "LOW";
+  let advisory = "Continue monitoring and routine assessment.";
+
+  if (unconscious || notBreathingNormally || triageScore >= 70) {
+    urgencyLevel = "CRITICAL";
+    advisory = "Immediate intervention required.";
+  } else if (severeBleeding || triageScore >= 45) {
+    urgencyLevel = "HIGH";
+    advisory = "Urgent clinician review required.";
+  } else if (triageScore >= 20) {
+    urgencyLevel = "MODERATE";
+    advisory = "Prompt assessment required.";
+  }
+
+  if (contextRisk.minPriority === "CRITICAL" && urgencyLevel !== "CRITICAL") {
+    urgencyLevel = "CRITICAL";
+    advisory = "Incident mechanism indicates very high clinical risk. Immediate intervention required.";
+  } else if (
+    contextRisk.minPriority === "HIGH" &&
+    !["CRITICAL", "HIGH"].includes(urgencyLevel)
+  ) {
+    urgencyLevel = "HIGH";
+    advisory = "Incident mechanism indicates high risk. Urgent clinician review required.";
+  } else if (
+    contextRisk.minPriority === "MODERATE" &&
+    urgencyLevel === "LOW"
+  ) {
+    urgencyLevel = "MODERATE";
+    advisory = "Incident mechanism indicates moderate risk. Prompt assessment required.";
   }
 
   return {
-    score,
-    urgency,
+    triageScore,
+    urgencyLevel,
     advisory,
     reasons,
   };
 }
 
-exports.assessTriage = async (req, res) => {
+exports.createPatientTriage = async (req, res) => {
   try {
+    const { patientId } = req.params;
     const {
-      reportId = null,
       unconscious = false,
       notBreathingNormally = false,
       severeBleeding = false,
-      multipleVictims = false,
       painScore = null,
+      multipleVictimsContext = false,
+      note = "",
     } = req.body;
 
-    const result = getTriageAssessment({
-      unconscious,
-      notBreathingNormally,
-      severeBleeding,
-      multipleVictims,
-      painScore,
-    });
-
-    const saved = await prisma.triageAssessment.create({
-      data: {
-        reportId,
-        unconscious,
-        notBreathingNormally,
-        severeBleeding,
-        multipleVictims,
-        painScore: painScore !== null && painScore !== "" ? Number(painScore) : null,
-        score: result.score,
-        urgency: result.urgency,
-        advisory: result.advisory,
-        reasons: result.reasons,
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      include: {
+        incident: true,
       },
     });
 
-    if (reportId) {
-      await prisma.staffActionLog.create({
-        data: {
-          reportId,
-          actionType: "TRIAGE_ASSESSMENT",
-          status: result.urgency,
-          note: result.advisory,
-          actorName: req.user.name,
-          actorUserId: req.user.id,
-        },
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
       });
     }
 
-    res.json({
+    const triageInput = {
+      unconscious: normalizeBoolean(unconscious),
+      notBreathingNormally: normalizeBoolean(notBreathingNormally),
+      severeBleeding: normalizeBoolean(severeBleeding),
+      painScore:
+        painScore === null || painScore === undefined || painScore === ""
+          ? null
+          : Number(painScore),
+      multipleVictimsContext: normalizeBoolean(multipleVictimsContext),
+      incidentType: patient.incident?.incidentType,
+      subIncidentType: patient.incident?.subIncidentType,
+      estimatedVictimCount: patient.incident?.estimatedVictimCount ?? 1,
+    };
+
+    const triageResult = computeTriage(triageInput);
+
+    const triage = await prisma.patientTriage.create({
+      data: {
+        patientId: patient.id,
+        incidentId: patient.incidentId,
+        unconscious: triageInput.unconscious,
+        notBreathingNormally: triageInput.notBreathingNormally,
+        severeBleeding: triageInput.severeBleeding,
+        painScore: triageInput.painScore,
+        multipleVictimsContext: triageInput.multipleVictimsContext,
+        triageScore: triageResult.triageScore,
+        urgencyLevel: triageResult.urgencyLevel,
+        advisory: triageResult.advisory,
+        reasons: triageResult.reasons,
+        note,
+        createdByUserId: req.user?.id || null,
+      },
+    });
+
+    await prisma.patient.update({
+      where: { id: patient.id },
+      data: {
+        status: "TRIAGED",
+      },
+    });
+
+    await prisma.patientTimelineEvent.create({
+      data: {
+        patientId: patient.id,
+        incidentId: patient.incidentId,
+        eventLabel: "Triage Completed",
+        eventStatus: triageResult.urgencyLevel,
+        note: triageResult.advisory,
+      },
+    });
+
+    await resolvePatientTriageDelayAlerts(patient.id);
+
+    await createAuditLog({
+      actionType: "TRIAGE_CREATED",
+      actorUserId: req.user?.id || null,
+      actorRole: req.user?.role || null,
+      incidentId: patient.incidentId,
+      patientId: patient.id,
+      targetTable: "PatientTriage",
+      targetId: triage.id,
+      newValue: {
+        triageScore: triage.triageScore,
+        urgencyLevel: triage.urgencyLevel,
+        advisory: triage.advisory,
+      },
+      reason: "Patient triage completed with incident context.",
+    });
+
+    return res.status(201).json({
       success: true,
-      data: saved,
+      data: triage,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Failed to assess triage",
+      message: "Failed to create triage assessment",
+      error: error.message,
+    });
+  }
+};
+
+exports.getPatientTriages = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    const triages = await prisma.patientTriage.findMany({
+      where: {
+        patientId,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: triages,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch patient triage history",
       error: error.message,
     });
   }

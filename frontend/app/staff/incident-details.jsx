@@ -1,724 +1,873 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
 import {
+  ScrollView,
   Text,
   StyleSheet,
-  Alert,
-  ScrollView,
-  Image,
   View,
-  Modal,
+  RefreshControl,
   Pressable,
-  Linking,
+  Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import AppButton from "../../src/components/AppButton";
+import BackNavButton from "../../src/components/BackNavButton";
+import PageHeader from "../../src/components/PageHeader";
 import FormSection from "../../src/components/FormSection";
-import StatusBadge from "../../src/components/StatusBadge";
 import FormInput from "../../src/components/FormInput";
 import FormSelect from "../../src/components/FormSelect";
-import InfoRow from "../../src/components/InfoRow";
-import HistoryItem from "../../src/components/HistoryItem";
-import StaffLogItem from "../../src/components/StaffLogItem";
-import QuickStatusAction from "../../src/components/QuickStatusAction";
-import SummaryPill from "../../src/components/SummaryPill";
-import PriorityBanner from "../../src/components/PriorityBanner";
-import PageHeader from "../../src/components/PageHeader";
-import BackNavButton from "../../src/components/BackNavButton";
-import { PUBLIC_REPORT_STATUSES } from "../../src/constants/statusOptions";
+import AppButton from "../../src/components/AppButton";
+import EmptyStateCard from "../../src/components/EmptyStateCard";
+import StatusBadge from "../../src/components/StatusBadge";
+import StaffNavBar from "../../src/components/StaffNavBar";
+import ThreadPanel from "../../src/components/ThreadPanel";
 import {
   getIncidentByIdService,
   updateIncidentStatusService,
+  analyzeIncidentPriorityService,
+  reorderIncidentQueueService,
+  addPatientToIncidentService,
 } from "../../src/services/staffIncidentService";
-import { API_ROOT_URL } from "../../src/config/api";
+import { getIncidentThreadUiService } from "../../src/services/communicationService";
 import { useAppTheme } from "../../src/context/ThemeContext";
+import { useToast } from "../../src/context/ToastContext";
+import { resolveMediaUrl } from "../../src/utils/mediaUrl";
+import AdminReturnButton from "../../src/components/AdminReturnButton";
 
-const QUICK_STATUS_PRESETS = [
-  {
-    label: "Under Review",
-    note: "Incident is being reviewed by emergency staff.",
-  },
-  {
-    label: "Accepted",
-    note: "Incident accepted for response and further handling.",
-  },
-  {
-    label: "Response In Progress",
-    note: "Emergency response handling is currently in progress.",
-  },
-  {
-    label: "Rejected",
-    note: "Incident report was reviewed and rejected.",
-  },
-  {
-    label: "Duplicate",
-    note: "This incident was identified as a duplicate report.",
-  },
-  {
-    label: "Closed",
-    note: "Incident handling has been completed and closed.",
-  },
+const STATUS_OPTIONS = [
+  { label: "Received", value: "RECEIVED" },
+  { label: "Under Review", value: "UNDER_REVIEW" },
+  { label: "Accepted", value: "ACCEPTED" },
+  { label: "Response In Progress", value: "RESPONSE_IN_PROGRESS" },
+  { label: "Rejected", value: "REJECTED" },
+  { label: "Cancelled", value: "CANCELLED" },
+  { label: "Closed", value: "CLOSED" },
 ];
+
+const QUEUE_OPTIONS = Array.from({ length: 10 }).map((_, index) => ({
+  label: String(index + 1),
+  value: String(index + 1),
+}));
+
+function getPriorityType(level) {
+  switch (level) {
+    case "CRITICAL":
+      return "danger";
+    case "HIGH":
+      return "warning";
+    case "MODERATE":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
 
 function getStatusType(status) {
   switch (status) {
-    case "Accepted":
-    case "Closed":
+    case "ACCEPTED":
+    case "CLOSED":
       return "success";
-    case "Under Review":
-    case "Response In Progress":
-    case "Duplicate":
+    case "UNDER_REVIEW":
+    case "RESPONSE_IN_PROGRESS":
       return "warning";
-    case "Received":
-      return "info";
-    case "Rejected":
+    case "REJECTED":
+    case "CANCELLED":
       return "danger";
+    default:
+      return "info";
+  }
+}
+
+function getRequestType(status) {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "APPROVED":
+    case "PARTIALLY_ALLOCATED":
+    case "RESERVED":
+    case "IN_PROGRESS":
+      return "warning";
+    case "REJECTED":
+    case "CANCELLED":
+      return "danger";
+    default:
+      return "info";
+  }
+}
+
+function getCategoryType(name) {
+  switch (name) {
+    case "BLOOD":
+      return "danger";
+    case "IMAGING":
+      return "info";
+    case "THEATRE":
+      return "warning";
+    case "BED":
+      return "success";
     default:
       return "neutral";
   }
 }
 
-function getUrgencyType(urgency) {
-  switch (urgency) {
-    case "Critical":
-      return "danger";
-    case "High":
-      return "warning";
-    case "Moderate":
-      return "info";
-    default:
-      return "neutral";
+function getIncidentContextLabel(incident) {
+  if (!incident) return "No incident context";
+  if (incident.subIncidentType) {
+    return `${incident.incidentType || "Incident"} • ${incident.subIncidentType}`;
   }
+  return incident.incidentType || "Incident context available";
 }
 
-function computePriority(incident, latestTriage) {
-  let score = 0;
-  const reasons = [];
-
-  if (latestTriage?.urgency === "Critical") {
-    score += 5;
-    reasons.push("critical triage urgency");
-  } else if (latestTriage?.urgency === "High") {
-    score += 4;
-    reasons.push("high triage urgency");
-  } else if (latestTriage?.urgency === "Moderate") {
-    score += 2;
-    reasons.push("moderate triage urgency");
-  }
-
-  if (Number(incident.victimCount) >= 5) {
-    score += 3;
-    reasons.push("multiple victims");
-  } else if (Number(incident.victimCount) >= 2) {
-    score += 2;
-    reasons.push("more than one victim");
-  } else {
-    score += 1;
-    reasons.push("single victim");
-  }
-
-  if (incident.mediaCount > 0) {
-    score += 1;
-    reasons.push("evidence available");
-  }
-
-  if (
-    incident.latitude !== null &&
-    incident.latitude !== undefined &&
-    incident.longitude !== null &&
-    incident.longitude !== undefined
-  ) {
-    score += 1;
-    reasons.push("location confirmed");
-  }
-
-  let level = "Low";
-
-  if (score >= 8) {
-    level = "Critical";
-  } else if (score >= 6) {
-    level = "High";
-  } else if (score >= 4) {
-    level = "Moderate";
-  }
+function summarizeRequests(patients = []) {
+  const requests = patients.flatMap((patient) => patient.resourceRequests || []);
 
   return {
-    level,
-    score,
-    reason: `Priority based on ${reasons.join(", ")}.`,
+    total: requests.length,
+    partial: requests.filter((r) => r.requestStatus === "PARTIALLY_ALLOCATED").length,
+    reserved: requests.filter((r) => r.requestStatus === "RESERVED").length,
+    completed: requests.filter((r) => r.requestStatus === "COMPLETED").length,
   };
 }
 
 export default function IncidentDetailsScreen() {
-  const { colors, radius, spacing } = useAppTheme();
-  const params = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
+  const { colors, typography, radius, spacing, shadow } = useAppTheme();
+  const { showToast } = useToast();
+
   const [incident, setIncident] = useState(null);
-  const [selectedStatus, setSelectedStatus] = useState("Received");
-  const [staffNote, setStaffNote] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [statusForm, setStatusForm] = useState({
+    status: "",
+    note: "",
+    rejectionReason: "",
+  });
+
+  const [queueForm, setQueueForm] = useState({
+    manualOverrideRank: "",
+    manualOverrideReason: "",
+  });
+
+  const [addPatientNote, setAddPatientNote] = useState("");
+  const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
+  const [isSubmittingQueue, setIsSubmittingQueue] = useState(false);
+  const [isAddingPatient, setIsAddingPatient] = useState(false);
+  const [isRunningAi, setIsRunningAi] = useState(false);
+
+  const loadIncident = async (refresh = false) => {
+    try {
+      refresh ? setIsRefreshing(true) : setIsLoading(true);
+
+      const data = await getIncidentByIdService(id);
+      setIncident(data);
+
+      setStatusForm((prev) => ({
+        ...prev,
+        status: data.status || "",
+      }));
+    } catch (error) {
+      showToast({
+        title: "Incident Load Failed",
+        message: error.message || "Unable to load incident details.",
+        type: "error",
+      });
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const loadIncident = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getIncidentByIdService(params.id);
-        setIncident(data);
-        setSelectedStatus(data.status);
-        setStaffNote(data.staffNote || "");
-      } catch (error) {
-        Alert.alert("Load Failed", "Unable to load incident details.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (id) loadIncident();
+  }, [id]);
 
-    if (params.id) {
-      loadIncident();
+  const activePatients = useMemo(
+    () => (incident?.patients || []).filter((item) => !item.isExcluded),
+    [incident]
+  );
+
+  const requestSummary = useMemo(
+    () => summarizeRequests(activePatients),
+    [activePatients]
+  );
+
+  const handleRunAi = async () => {
+    try {
+      setIsRunningAi(true);
+      await analyzeIncidentPriorityService(id);
+      await loadIncident(true);
+
+      showToast({
+        title: "AI Analysis Complete",
+        message: "Incident priority was refreshed successfully.",
+        type: "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "AI Analysis Failed",
+        message: error.message || "Unable to analyze incident.",
+        type: "error",
+      });
+    } finally {
+      setIsRunningAi(false);
     }
-  }, [params.id]);
-
-  const handleAccept = () => setSelectedStatus("Accepted");
-  const handleReject = () => setSelectedStatus("Rejected");
-  const handleMarkDuplicate = () => setSelectedStatus("Duplicate");
-
-  const handlePresetSelect = (preset) => {
-    setSelectedStatus(preset.label);
-    setStaffNote(preset.note);
   };
 
   const handleUpdateStatus = async () => {
-    if (!incident) return;
-
-    try {
-      setIsUpdating(true);
-      const updated = await updateIncidentStatusService(incident.id, {
-        status: selectedStatus,
-        note: staffNote,
+    if (!statusForm.status) {
+      showToast({
+        title: "Missing Status",
+        message: "Select an incident status first.",
+        type: "warning",
       });
-
-      setIncident(updated);
-      setSelectedStatus(updated.status);
-      setStaffNote(updated.staffNote || "");
-      Alert.alert("Status Updated", `Incident updated to ${updated.status}`);
-    } catch (error) {
-      Alert.alert("Update Failed", error.message || "Failed to update incident.");
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleProceedToTriage = () => {
-    router.push({
-      pathname: "/staff/triage",
-      params: {
-        reportId: incident.id,
-        trackingCode: incident.trackingCode,
-      },
-    });
-  };
-
-  const openPreview = (url) => setPreviewImageUrl(url);
-  const closePreview = () => setPreviewImageUrl(null);
-
-  const handleOpenMaps = async () => {
-    if (
-      incident?.latitude === null ||
-      incident?.latitude === undefined ||
-      incident?.longitude === null ||
-      incident?.longitude === undefined
-    ) {
-      Alert.alert("Location Unavailable", "No coordinates available for this report.");
       return;
     }
 
-    const url = `https://www.google.com/maps/search/?api=1&query=${incident.latitude},${incident.longitude}`;
+    if (
+      ["REJECTED", "CANCELLED"].includes(statusForm.status) &&
+      !statusForm.rejectionReason.trim()
+    ) {
+      showToast({
+        title: "Missing Reason",
+        message: "Enter a rejection or cancellation reason.",
+        type: "warning",
+      });
+      return;
+    }
 
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert("Maps Unavailable", "Unable to open Google Maps.");
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert("Maps Error", "Failed to open map location.");
+      setIsSubmittingStatus(true);
+
+      await updateIncidentStatusService(id, {
+        status: statusForm.status,
+        note: statusForm.note.trim(),
+        rejectionReason: statusForm.rejectionReason.trim() || null,
+      });
+
+      setStatusForm((prev) => ({
+        ...prev,
+        note: "",
+        rejectionReason: "",
+      }));
+
+      showToast({
+        title: "Status Updated",
+        message: "Incident status updated successfully.",
+        type: "success",
+      });
+
+      await loadIncident(true);
+    } catch (error) {
+      showToast({
+        title: "Status Update Failed",
+        message: error.message || "Unable to update incident.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmittingStatus(false);
     }
   };
 
-  if (isLoading) {
+  const handleQueueOverride = async () => {
+    if (!queueForm.manualOverrideRank || !queueForm.manualOverrideReason.trim()) {
+      showToast({
+        title: "Missing Queue Data",
+        message: "Select a rank and enter a reason.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmittingQueue(true);
+
+      await reorderIncidentQueueService(id, {
+        manualOverrideRank: Number(queueForm.manualOverrideRank),
+        manualOverrideReason: queueForm.manualOverrideReason.trim(),
+      });
+
+      setQueueForm({
+        manualOverrideRank: "",
+        manualOverrideReason: "",
+      });
+
+      showToast({
+        title: "Queue Updated",
+        message: "Manual queue override applied.",
+        type: "success",
+      });
+
+      await loadIncident(true);
+    } catch (error) {
+      showToast({
+        title: "Queue Override Failed",
+        message: error.message || "Unable to override queue.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmittingQueue(false);
+    }
+  };
+
+  const handleAddPatient = async () => {
+    try {
+      setIsAddingPatient(true);
+
+      await addPatientToIncidentService(id, {
+        note: addPatientNote.trim(),
+      });
+
+      setAddPatientNote("");
+
+      showToast({
+        title: "Patient Added",
+        message: "A new patient was added to this incident.",
+        type: "success",
+      });
+
+      await loadIncident(true);
+    } catch (error) {
+      showToast({
+        title: "Add Patient Failed",
+        message: error.message || "Unable to add patient.",
+        type: "error",
+      });
+    } finally {
+      setIsAddingPatient(false);
+    }
+  };
+
+  if (isLoading && !incident) {
     return (
-      <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-      >
-        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
-        <PageHeader
-          eyebrow="Incident Review"
-          title="Incident Details"
-          subtitle="Loading incident..."
-          icon="eye-outline"
-        />
-      </ScrollView>
+      <>
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
+          <PageHeader
+            eyebrow="Incident Coordination"
+            title="Incident Details"
+            subtitle="Loading incident details..."
+            icon="document-text-outline"
+          />
+        </ScrollView>
+        <StaffNavBar activeRoute="/staff/incidents" />
+      </>
     );
   }
 
   if (!incident) {
     return (
-      <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-      >
-        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
-        <PageHeader
-          eyebrow="Incident Review"
-          title="Incident Details"
-          subtitle="Incident not found."
-          icon="eye-outline"
-        />
-      </ScrollView>
+      <>
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
+          <PageHeader
+            eyebrow="Incident Coordination"
+            title="Incident Details"
+            subtitle="Incident data is unavailable."
+            icon="document-text-outline"
+          />
+          <EmptyStateCard
+            title="Incident Not Found"
+            message="This incident could not be loaded."
+            icon="document-text-outline"
+            actionLabel="Retry"
+            onAction={() => loadIncident(true)}
+          />
+        </ScrollView>
+        <StaffNavBar activeRoute="/staff/incidents" />
+      </>
     );
   }
-
-  const hasCoordinates =
-    incident.latitude !== null &&
-    incident.latitude !== undefined &&
-    incident.longitude !== null &&
-    incident.longitude !== undefined;
-
-  const latestTriage = incident.triageAssessments?.[0] || null;
-
-  const evidenceValue = incident.mediaCount > 0 ? "Available" : "None";
-  const evidenceType = incident.mediaCount > 0 ? "info" : "neutral";
-
-  const locationValue = hasCoordinates ? "Available" : "Missing";
-  const locationType = hasCoordinates ? "success" : "warning";
-
-  const triageValue = latestTriage?.urgency || "Not Assessed";
-  const triageType = latestTriage
-    ? getUrgencyType(latestTriage.urgency)
-    : "neutral";
-
-  const publicStatusType = getStatusType(selectedStatus);
-  const priority = computePriority(incident, latestTriage);
 
   return (
     <>
       <ScrollView
         contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadIncident(true)}
+          />
+        }
       >
-        <BackNavButton label="Back to Reports" fallbackRoute="/staff/incidents" />
+        <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
 
         <PageHeader
-          eyebrow="Incident Review"
-          title="Incident Details"
-          subtitle="Review the incident and choose the next action."
-          icon="eye-outline"
+          eyebrow="Incident Coordination"
+          title={incident.trackingCode}
+          subtitle={getIncidentContextLabel(incident)}
+          icon="document-text-outline"
         />
 
-        <FormSection title="Priority Overview">
-          <PriorityBanner
-            level={priority.level}
-            score={priority.score}
-            reason={priority.reason}
-          />
-        </FormSection>
-
-        <FormSection title="Quick Summary">
-          <View style={styles.summaryWrap}>
-            <SummaryPill
-              label="Public Status"
-              value={selectedStatus}
-              type={publicStatusType}
-            />
-            <SummaryPill label="Triage" value={triageValue} type={triageType} />
-            <SummaryPill label="Evidence" value={evidenceValue} type={evidenceType} />
-            <SummaryPill label="Location" value={locationValue} type={locationType} />
-          </View>
-        </FormSection>
-
         <FormSection title="Incident Summary">
-          <InfoRow label="Incident ID" value={incident.id} />
-          <InfoRow label="Tracking Code" value={incident.trackingCode} />
-          <InfoRow
-            label="Type"
-            value={incident.resolvedIncidentType || incident.incidentType}
-          />
-          <InfoRow label="Victims" value={String(incident.victimCount)} />
-          <InfoRow
-            label="Reported At"
-            value={new Date(incident.createdAt).toLocaleString()}
-          />
-          <InfoRow label="Source" value={incident.source} />
-          <StatusBadge
-            label={selectedStatus}
-            type={getStatusType(selectedStatus)}
-          />
-        </FormSection>
-
-        <FormSection title="Reporter & Location">
-          <InfoRow label="Reporter Phone" value={incident.phoneNumber} />
-          <InfoRow label="Resolved Location" value={incident.resolvedLocationText} />
-          <InfoRow label="Detected Location" value={incident.autoLocationText} />
-          <InfoRow label="Typed Landmark" value={incident.manualLocationText} />
-          <InfoRow
-            label="Coordinates"
-            value={hasCoordinates ? `${incident.latitude}, ${incident.longitude}` : "Not available"}
-          />
-        </FormSection>
-
-        <FormSection title="Location Preview">
           <View
             style={[
-              styles.mapCard,
+              styles.card,
               {
+                backgroundColor: colors.surface,
                 borderColor: colors.border,
                 borderRadius: radius.lg,
-                backgroundColor: colors.surfaceMuted,
+                padding: spacing.md,
               },
+              shadow,
             ]}
           >
-            <View
-              style={[
-                styles.mapIconWrap,
-                { backgroundColor: colors.infoBg },
-              ]}
-            >
-              <Ionicons name="location-outline" size={24} color={colors.primaryDark} />
+            <View style={styles.badgeRow}>
+              <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
+
+              {incident.aiAssessment?.priorityLevel ? (
+                <StatusBadge
+                  label={`AI ${incident.aiAssessment.priorityLevel}`}
+                  type={getPriorityType(incident.aiAssessment.priorityLevel)}
+                />
+              ) : null}
+
+              {incident.queuePriority?.finalPriorityLevel ? (
+                <StatusBadge
+                  label={`QUEUE ${incident.queuePriority.finalPriorityLevel}`}
+                  type={getPriorityType(incident.queuePriority.finalPriorityLevel)}
+                />
+              ) : null}
             </View>
 
-            <Text style={[styles.mapTitle, { color: colors.text }]} maxFontSizeMultiplier={1.5}>
-              {incident.resolvedLocationText || "Location not available"}
+            <Text style={[typography.body, { color: colors.text }]}>
+              Incident Type: {incident.incidentType || "Unknown"}
             </Text>
 
-            <Text
-              style={[styles.mapSubtitle, { color: colors.textMuted }]}
-              maxFontSizeMultiplier={1.6}
-            >
-              {hasCoordinates
-                ? `${incident.latitude}, ${incident.longitude}`
-                : "Coordinates not available"}
+            {incident.subIncidentType ? (
+              <Text style={[typography.body, { color: colors.text }]}>
+                Incident Subtype: {incident.subIncidentType}
+              </Text>
+            ) : null}
+
+            {incident.otherIncidentType ? (
+              <Text style={[typography.body, { color: colors.text }]}>
+                Other Type Detail: {incident.otherIncidentType}
+              </Text>
+            ) : null}
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Location:{" "}
+              {incident.resolvedLocationText ||
+                incident.manualLocationText ||
+                incident.autoLocationText ||
+                "Coordinates submitted"}
             </Text>
 
-            <AppButton
-              title="Open in Google Maps"
-              onPress={handleOpenMaps}
-              variant="secondary"
-              disabled={!hasCoordinates}
-            />
+            <Text style={[typography.body, { color: colors.text }]}>
+              Coordinates: {incident.latitude ?? "N/A"}, {incident.longitude ?? "N/A"}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Estimated Patients: {incident.estimatedVictimCount ?? 0}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Reporter Phone: {incident.phoneNumber || "Not provided"}
+            </Text>
+
+            {incident.notes ? (
+              <Text style={[typography.body, { color: colors.text }]}>
+                Notes: {incident.notes}
+              </Text>
+            ) : null}
+
+            {incident.mediaAttachments?.[0]?.fileUrl ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[typography.body, { color: colors.textMuted }]}>
+                  Incident Photo:
+                </Text>
+
+                <Image
+                  source={{
+                    uri: resolveMediaUrl(incident.mediaAttachments[0].filePath),
+                  }}
+                  style={styles.incidentImage}
+                />
+              </View>
+            ) : (
+              <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+                No incident photo available.
+              </Text>
+            )}
           </View>
         </FormSection>
 
-        <FormSection title="Incident Notes & Media">
-          <InfoRow label="Reporter Notes" value={incident.notes} />
-          <InfoRow label="Attached Media Count" value={String(incident.mediaCount)} />
-
-          {incident.mediaAttachments?.length ? (
-            incident.mediaAttachments.map((item) => {
-              const imageUrl = `${API_ROOT_URL}${item.filePath}`;
-
-              return (
-                <Pressable
-                  key={item.id}
-                  style={styles.mediaBlock}
-                  onPress={() => openPreview(imageUrl)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open evidence image ${item.fileName}`}
-                >
-                  <Image
-                    source={{ uri: imageUrl }}
-                    style={[styles.mediaImage, { borderRadius: radius.lg }]}
-                  />
-                  <Text
-                    style={[styles.mediaName, { color: colors.textMuted }]}
-                    maxFontSizeMultiplier={1.6}
-                  >
-                    {item.fileName}
-                  </Text>
-                  <Text
-                    style={[styles.tapHint, { color: colors.primaryDark }]}
-                    maxFontSizeMultiplier={1.5}
-                  >
-                    Tap to view fullscreen
-                  </Text>
-                </Pressable>
-              );
-            })
-          ) : (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No uploaded evidence available.
-            </Text>
-          )}
+        <FormSection title="Resource Fulfillment Overview">
+          <View style={styles.summaryWrap}>
+            <MiniCard label="Requests" value={requestSummary.total} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+            <MiniCard label="Partial" value={requestSummary.partial} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+            <MiniCard label="Reserved" value={requestSummary.reserved} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+            <MiniCard label="Completed" value={requestSummary.completed} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+          </View>
         </FormSection>
 
-        <FormSection title="Latest Triage Assessment">
-          {latestTriage ? (
-            <>
+        <FormSection title="AI Priority Analysis">
+          {incident.aiAssessment ? (
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  padding: spacing.md,
+                },
+                shadow,
+              ]}
+            >
               <StatusBadge
-                label={latestTriage.urgency}
-                type={getUrgencyType(latestTriage.urgency)}
+                label={incident.aiAssessment.priorityLevel}
+                type={getPriorityType(incident.aiAssessment.priorityLevel)}
               />
-              <InfoRow label="Score" value={String(latestTriage.score)} />
-              <InfoRow label="Advisory" value={latestTriage.advisory} />
-              <InfoRow
-                label="Assessed At"
-                value={new Date(latestTriage.createdAt).toLocaleString()}
-              />
-              <Text
-                style={[styles.reasonTitle, { color: colors.textMuted }]}
-                maxFontSizeMultiplier={1.5}
-              >
-                Reasons
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Confidence: {incident.aiAssessment.confidence}%
               </Text>
-              {latestTriage.reasons?.length ? (
-                latestTriage.reasons.map((reason) => (
-                  <Text
-                    key={reason}
-                    style={[styles.reasonItem, { color: colors.text }]}
-                    maxFontSizeMultiplier={1.7}
-                  >
-                    • {reason}
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Recommended Action: {incident.aiAssessment.recommendedNextAction}
+              </Text>
+
+              <Text style={[typography.body, { color: colors.textMuted }]}>
+                Basis: {incident.aiAssessment.analysisBasis}
+              </Text>
+
+              {incident.aiAssessment.keyRiskFactors?.length ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={[typography.body, { color: colors.textMuted }]}>
+                    Key Risk Factors:
                   </Text>
-                ))
-              ) : (
-                <Text style={[styles.reasonItem, { color: colors.text }]}>
-                  • No reasons recorded
-                </Text>
-              )}
-            </>
+                  {incident.aiAssessment.keyRiskFactors.map((factor, index) => (
+                    <Text
+                      key={`${factor}-${index}`}
+                      style={[typography.body, { color: colors.text }]}
+                    >
+                      • {factor}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </View>
           ) : (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No triage assessment linked yet.
-            </Text>
+            <EmptyStateCard
+              title="No AI Analysis"
+              message="Run AI analysis to refresh incident priority."
+              icon="sparkles-outline"
+            />
           )}
-        </FormSection>
 
-        <FormSection title="Staff Audit Log">
-          {incident.staffLogs?.length ? (
-            incident.staffLogs.map((log) => (
-              <StaffLogItem key={log.id} item={log} />
-            ))
-          ) : (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No staff actions recorded yet.
-            </Text>
-          )}
-        </FormSection>
-
-        <FormSection title="Status History">
-          {incident.statusHistory?.length ? (
-            incident.statusHistory.map((item) => (
-              <HistoryItem
-                key={item.id}
-                item={{
-                  id: item.id,
-                  label: item.label,
-                  time: new Date(item.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                }}
-              />
-            ))
-          ) : (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No status history available.
-            </Text>
-          )}
-        </FormSection>
-
-        <FormSection title="Review Actions">
-          <AppButton title="Accept Report" onPress={handleAccept} />
-          <AppButton title="Reject Report" onPress={handleReject} variant="secondary" />
           <AppButton
-            title="Mark Duplicate"
-            onPress={handleMarkDuplicate}
-            variant="secondary"
+            title={isRunningAi ? "Running..." : "Run AI Analysis"}
+            onPress={handleRunAi}
+            loading={isRunningAi}
+            disabled={isRunningAi}
           />
         </FormSection>
 
-        <FormSection title="Public Tracking Update">
-          <Text
-            style={[styles.quickTitle, { color: colors.textMuted }]}
-            maxFontSizeMultiplier={1.5}
-          >
-            Quick Presets
+        <FormSection title="Queue Priority Override">
+          <Text style={[typography.body, { color: colors.textMuted }]}>
+            Final Priority Level: {incident.queuePriority?.finalPriorityLevel || "Not set"}
           </Text>
-          <View style={styles.quickWrap}>
-            {QUICK_STATUS_PRESETS.map((preset) => (
-              <QuickStatusAction
-                key={preset.label}
-                label={preset.label}
-                active={selectedStatus === preset.label}
-                onPress={() => handlePresetSelect(preset)}
-              />
-            ))}
-          </View>
 
-          <Text
-            style={[styles.quickHint, { color: colors.textMuted }]}
-            maxFontSizeMultiplier={1.7}
-          >
-            Tap a preset to auto-fill the status and a suggested staff note.
+          <Text style={[typography.body, { color: colors.textMuted }]}>
+            Final Priority Score: {incident.queuePriority?.finalPriorityScore ?? "Not set"}
           </Text>
 
           <FormSelect
-            label="Public Status"
-            selectedValue={selectedStatus}
-            onValueChange={setSelectedStatus}
-            options={PUBLIC_REPORT_STATUSES}
-            placeholder="Select public status"
+            label="Manual Queue Rank"
+            selectedValue={queueForm.manualOverrideRank}
+            onValueChange={(value) =>
+              setQueueForm((prev) => ({
+                ...prev,
+                manualOverrideRank: value,
+              }))
+            }
+            options={QUEUE_OPTIONS}
+            placeholder="Select manual rank"
           />
 
           <FormInput
-            label="Internal Staff Note"
-            placeholder="Add internal note for staff follow-up"
-            value={staffNote}
-            onChangeText={setStaffNote}
+            label="Override Reason"
+            value={queueForm.manualOverrideReason}
+            onChangeText={(value) =>
+              setQueueForm((prev) => ({
+                ...prev,
+                manualOverrideReason: value,
+              }))
+            }
+            placeholder="Why are you changing queue order?"
             multiline
           />
 
           <AppButton
-            title={isUpdating ? "Updating..." : "Update Public Status"}
-            onPress={handleUpdateStatus}
-            disabled={isUpdating}
+            title={isSubmittingQueue ? "Applying..." : "Apply Queue Override"}
+            onPress={handleQueueOverride}
+            loading={isSubmittingQueue}
+            disabled={isSubmittingQueue}
+            variant="secondary"
           />
         </FormSection>
 
-        <FormSection title="Next Step">
-          <AppButton title="Proceed to Triage" onPress={handleProceedToTriage} />
+        <FormSection title="Incident Status Update">
+          <FormSelect
+            label="Status"
+            selectedValue={statusForm.status}
+            onValueChange={(value) =>
+              setStatusForm((prev) => ({
+                ...prev,
+                status: value,
+              }))
+            }
+            options={STATUS_OPTIONS}
+            placeholder="Select incident status"
+          />
+
+          <FormInput
+            label="Status Note"
+            value={statusForm.note}
+            onChangeText={(value) =>
+              setStatusForm((prev) => ({
+                ...prev,
+                note: value,
+              }))
+            }
+            placeholder="Enter operational or public note"
+            multiline
+          />
+
+          {["REJECTED", "CANCELLED"].includes(statusForm.status) ? (
+            <FormInput
+              label="Rejection / Cancellation Reason"
+              value={statusForm.rejectionReason}
+              onChangeText={(value) =>
+                setStatusForm((prev) => ({
+                  ...prev,
+                  rejectionReason: value,
+                }))
+              }
+              placeholder="Enter reason"
+              multiline
+            />
+          ) : null}
+
+          <AppButton
+            title={isSubmittingStatus ? "Updating..." : "Update Status"}
+            onPress={handleUpdateStatus}
+            loading={isSubmittingStatus}
+            disabled={isSubmittingStatus}
+          />
+        </FormSection>
+
+        <FormSection title="Patients">
+          <FormInput
+            label="Add Patient Note"
+            value={addPatientNote}
+            onChangeText={setAddPatientNote}
+            placeholder="Optional note"
+            multiline
+          />
+
+          <AppButton
+            title={isAddingPatient ? "Adding..." : "Add Patient"}
+            onPress={handleAddPatient}
+            loading={isAddingPatient}
+            disabled={isAddingPatient}
+            variant="secondary"
+          />
+
+          {activePatients.length ? (
+            activePatients.map((patient) => {
+              const latestTriage = patient.triages?.[0] || null;
+
+              return (
+                <Pressable
+                  key={patient.id}
+                  style={[
+                    styles.patientCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      padding: spacing.md,
+                    },
+                    shadow,
+                  ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/staff/patient-details",
+                      params: { patientId: patient.id },
+                    })
+                  }
+                >
+                  <View style={styles.badgeRow}>
+                    <StatusBadge label={patient.status} type="info" />
+                    {latestTriage ? (
+                      <StatusBadge
+                        label={latestTriage.urgencyLevel}
+                        type={getPriorityType(latestTriage.urgencyLevel)}
+                      />
+                    ) : null}
+                  </View>
+
+                  <Text style={[typography.label, { color: colors.text }]}>
+                    {patient.patientCode}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.textMuted }]}>
+                    {patient.fullName || "Unnamed patient"}
+                  </Text>
+
+                  {patient.resourceRequests?.length ? (
+                    <View style={{ marginTop: 8 }}>
+                      {patient.resourceRequests.map((request) => (
+                        <View key={request.id} style={styles.requestLine}>
+                          <View style={styles.badgeRow}>
+                            <StatusBadge
+                              label={request.resourceCategory?.name || "RESOURCE"}
+                              type={getCategoryType(request.resourceCategory?.name)}
+                            />
+                            <StatusBadge
+                              label={request.requestStatus}
+                              type={getRequestType(request.requestStatus)}
+                            />
+                          </View>
+                          <Text style={[typography.body, { color: colors.textMuted }]}>
+                            {request.requestReason}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })
+          ) : (
+            <EmptyStateCard
+              title="No Patients"
+              message="No patients have been added to this incident yet."
+              icon="people-outline"
+            />
+          )}
+        </FormSection>
+
+        <ThreadPanel
+          title="Incident Communication"
+          loadKey={incident.id}
+          loadThread={() => getIncidentThreadUiService(incident.id)}
+        />
+
+        <FormSection title="Status Timeline">
+          {incident.statusHistory?.length ? (
+            incident.statusHistory.map((item) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.timelineItem,
+                  {
+                    borderLeftColor: colors.primary,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+              >
+                <Text style={[typography.label, { color: colors.text }]}>
+                  {item.status}
+                </Text>
+                <Text style={[typography.body, { color: colors.textMuted }]}>
+                  {new Date(item.createdAt).toLocaleString()}
+                </Text>
+                {item.note ? (
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    {item.note}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <EmptyStateCard
+              title="No Status History"
+              message="No timeline entries are available yet."
+              icon="time-outline"
+            />
+          )}
         </FormSection>
       </ScrollView>
 
-      <Modal
-        visible={!!previewImageUrl}
-        transparent
-        animationType="fade"
-        onRequestClose={closePreview}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable
-            style={[
-              styles.closeButton,
-              { backgroundColor: "rgba(255,255,255,0.15)" },
-            ]}
-            onPress={closePreview}
-          >
-            <Ionicons name="close" size={24} color="#ffffff" />
-          </Pressable>
-
-          {previewImageUrl ? (
-            <Image
-              source={{ uri: previewImageUrl }}
-              style={[styles.fullscreenImage, { borderRadius: radius.md }]}
-              resizeMode="contain"
-            />
-          ) : null}
-        </View>
-      </Modal>
+      <StaffNavBar activeRoute="/staff/incidents" />
     </>
+  );
+}
+
+function MiniCard({ label, value, colors, typography, radius, spacing, shadow }) {
+  return (
+    <View
+      style={[
+        styles.miniCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+        },
+        shadow,
+      ]}
+    >
+      <Text style={[typography.label, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.miniValue, { color: colors.text }]}>{value}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     padding: 24,
+    paddingBottom: 110,
     flexGrow: 1,
+  },
+  card: {
+    borderWidth: 1,
+  },
+  incidentImage: {
+    width: "100%",
+    height: 260,
+    borderRadius: 12,
+    marginTop: 8,
   },
   summaryWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 12,
   },
-  emptyText: {
-    fontSize: 14,
-  },
-  mapCard: {
+  miniCard: {
     borderWidth: 1,
-    padding: 16,
+    minWidth: 140,
   },
-  mapIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
+  miniValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 6,
   },
-  mapTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  mapSubtitle: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  mediaBlock: {
-    marginTop: 12,
-    marginBottom: 14,
-  },
-  mediaImage: {
-    width: "100%",
-    height: 240,
-    marginBottom: 8,
-  },
-  mediaName: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  tapHint: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  reasonTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 8,
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  reasonItem: {
-    fontSize: 14,
-    marginBottom: 6,
-  },
-  quickTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  quickWrap: {
+  badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  quickHint: {
-    fontSize: 13,
-    marginBottom: 12,
-    lineHeight: 19,
+  patientCard: {
+    borderWidth: 1,
+    marginBottom: 10,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
+  requestLine: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
   },
-  fullscreenImage: {
-    width: "100%",
-    height: "85%",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
+  timelineItem: {
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 12,
   },
 });

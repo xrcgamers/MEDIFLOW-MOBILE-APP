@@ -4,10 +4,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import HomeActionCard from "../src/components/HomeActionCard";
 import ThemeModeToggle from "../src/components/ThemeModeToggle";
 import FormSection from "../src/components/FormSection";
+import PageHeader from "../src/components/PageHeader";
 import { useAppTheme } from "../src/context/ThemeContext";
 
 export default function HomeScreen() {
-  const { colors, spacing, typography, radius, isDark } = useAppTheme();
+  const { colors, spacing, typography, radius, isDark, shadow } = useAppTheme();
 
   return (
     <ScrollView
@@ -27,18 +28,19 @@ export default function HomeScreen() {
         style={[
           styles.hero,
           {
-            borderRadius: 24,
+            borderRadius: radius.xl || 24,
             padding: spacing.xl,
             marginBottom: spacing.xl,
             borderColor: colors.border,
           },
+          shadow,
         ]}
       >
         <Text
           style={[styles.eyebrow, { color: colors.primary }]}
           maxFontSizeMultiplier={1.4}
         >
-          Mulago A&E Support
+          Mulago A&amp;E Support
         </Text>
 
         <Text
@@ -52,14 +54,26 @@ export default function HomeScreen() {
           style={[styles.subtitle, typography.body, { color: colors.textMuted }]}
           maxFontSizeMultiplier={1.8}
         >
-          AI and Mobile Enabled Accident & Emergency Management System
+          AI and mobile enabled accident and emergency management system for
+          reporting, triage, coordination, and resource handling.
         </Text>
       </LinearGradient>
+
+      <PageHeader
+        eyebrow="Public Access"
+        title="Emergency Access"
+        subtitle="Choose what you want to do."
+        icon="home-outline"
+      />
 
       <FormSection title="Appearance">
         <ThemeModeToggle />
         <Text
-          style={[styles.helperText, typography.body, { color: colors.textMuted, marginTop: spacing.sm }]}
+          style={[
+            styles.helperText,
+            typography.body,
+            { color: colors.textMuted, marginTop: spacing.sm },
+          ]}
           maxFontSizeMultiplier={1.8}
         >
           Choose the appearance mode you prefer.
@@ -69,25 +83,25 @@ export default function HomeScreen() {
       <View style={styles.cards}>
         <HomeActionCard
           title="Report Emergency"
-          description="Submit a new emergency report. Your device location is captured automatically when reporting begins."
+          description="Submit a new emergency report. Incident type, location, notes, and media can be captured for faster hospital review."
           buttonTitle="Report Emergency"
-          onPress={() => router.push("/report")}
+          onPress={() => router.push("/report-emergency")}
           icon="warning-outline"
         />
 
         <HomeActionCard
           title="Track Existing Report"
-          description="Check the progress of a submitted emergency report using a tracking code. Phone number is optional."
+          description="Track an emergency report using its tracking code and see the latest public progress."
           buttonTitle="Track Report"
-          onPress={() => router.push("/track")}
+          onPress={() => router.push("/track-report")}
           variant="secondary"
           icon="locate-outline"
         />
 
         <HomeActionCard
           title="Staff Access"
-          description="Authorized hospital staff can log in to review incidents, perform triage, and monitor operational resources."
-          buttonTitle="Login"
+          description="Hospital staff can sign in to manage incidents, triage patients, communicate across sections, and handle resources."
+          buttonTitle="Staff Login"
           onPress={() => router.push("/auth/login")}
           variant="secondary"
           icon="shield-checkmark-outline"

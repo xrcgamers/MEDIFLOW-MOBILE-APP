@@ -1,59 +1,156 @@
 import { View, Pressable, Text, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../context/ThemeContext";
+import { getDefaultStaffRoute } from "../utils/getDefaultStaffRoute";
 
-const NAV_ITEMS = [
-  { label: "Home", icon: "home-outline", route: "/staff" },
-  { label: "Reports", icon: "list-outline", route: "/staff/incidents" },
-  { label: "Triage", icon: "pulse-outline", route: "/staff/triage" },
-  { label: "Resources", icon: "layers-outline", route: "/staff/resources" },
-  { label: "Settings", icon: "settings-outline", route: "/staff/settings" },
-];
+function buildItems(role) {
+  if (role === "EMERGENCY_NURSE") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/emergency-nurse",
+        icon: "shield-checkmark-outline",
+      },
+      {
+        label: "Queue",
+        route: "/staff/incidents",
+        icon: "list-outline",
+      },
+    ];
+  }
+
+  if (role === "TRIAGE_NURSE") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/triage-nurse",
+        icon: "pulse-outline",
+      },
+      {
+        label: "Resources",
+        route: "/staff/resources",
+        icon: "layers-outline",
+      },
+    ];
+  }
+
+  if (role === "BLOOD_BANK_STAFF") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/blood-bank",
+        icon: "water-outline",
+      },
+    ];
+  }
+
+  if (role === "IMAGING_STAFF") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/imaging",
+        icon: "scan-outline",
+      },
+    ];
+  }
+
+  if (role === "THEATRE_STAFF") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/theatre",
+        icon: "medkit-outline",
+      },
+    ];
+  }
+
+  if (role === "BED_MANAGER") {
+    return [
+      {
+        label: "Home",
+        route: "/staff/bed-manager",
+        icon: "bed-outline",
+      },
+    ];
+  }
+
+  if (role === "ADMIN") {
+  return [
+    {
+      label: "Admin",
+      route: "/admin",
+      icon: "grid-outline",
+    },
+    {
+      label: "Emergency",
+      route: "/staff/emergency-nurse",
+      icon: "shield-checkmark-outline",
+    },
+    {
+      label: "Triage",
+      route: "/staff/triage-nurse",
+      icon: "pulse-outline",
+    },
+    {
+      label: "Queue",
+      route: "/staff/incidents",
+      icon: "list-outline",
+    },
+  ];
+}
+
+  return [
+    {
+      label: "Home",
+      route: "/staff",
+      icon: "home-outline",
+    },
+  ];
+}
 
 export default function StaffNavBar({ activeRoute }) {
-  const { colors, radius, shadow, isDark } = useAppTheme();
+  const { user } = useAuth();
+  const { colors, typography } = useAppTheme();
+
+  const defaultHome = getDefaultStaffRoute(user?.role);
+  const items = buildItems(user?.role);
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? "rgba(15, 23, 42, 0.92)" : "rgba(255,255,255,0.92)",
-          borderColor: colors.border,
-          borderRadius: radius.lg,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
         },
-        shadow,
       ]}
-      accessible
-      accessibilityRole="tablist"
-      accessibilityLabel="Staff navigation"
     >
-      {NAV_ITEMS.map((item) => {
-        const active = activeRoute === item.route;
+      {items.map((item) => {
+        const resolvedRoute = item.label === "Home" ? defaultHome : item.route;
+        const isActive = activeRoute === resolvedRoute || activeRoute === item.route;
 
         return (
           <Pressable
-            key={item.route}
-            onPress={() => router.push(item.route)}
+            key={`${item.label}-${resolvedRoute}`}
             style={styles.item}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={item.label}
+            onPress={() => router.push(resolvedRoute)}
           >
             <Ionicons
               name={item.icon}
               size={20}
-              color={active ? colors.primaryDark : colors.textMuted}
+              color={isActive ? colors.primary : colors.textMuted}
             />
+
             <Text
               style={[
-                styles.label,
+                typography.label,
                 {
-                  color: active ? colors.primaryDark : colors.textMuted,
+                  color: isActive ? colors.primary : colors.textMuted,
+                  marginTop: 4,
                 },
               ]}
-              maxFontSizeMultiplier={1.4}
             >
               {item.label}
             </Text>
@@ -67,24 +164,18 @@ export default function StaffNavBar({ activeRoute }) {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 16,
-    borderWidth: 1,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-around",
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingBottom: 14,
   },
   item: {
-    minWidth: 60,
-    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 4,
+    minWidth: 72,
   },
 });

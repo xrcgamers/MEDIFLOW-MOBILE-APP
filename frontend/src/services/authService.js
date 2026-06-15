@@ -1,31 +1,16 @@
 import apiClient from "../api/client";
-import {
-  saveAuthSession,
-  getStoredUser,
-  clearAuthSession,
-} from "./tokenStorage";
 
-export async function loginStaffService(form) {
-  const response = await apiClient.post("/auth/login", {
-    identifier: form.identifier.trim(),
-    password: form.password,
-  });
-
-  const { token, user } = response.data.data;
-  await saveAuthSession(token, user);
-
-  return { token, user };
+export async function loginService(payload) {
+  const response = await apiClient.post("/auth/login", payload);
+  return response.data.data;
 }
 
-export async function getCurrentStaffService() {
+export async function meService() {
   const response = await apiClient.get("/auth/me");
   return response.data.data;
 }
 
-export async function getCachedStaffUserService() {
-  return getStoredUser();
-}
-
-export async function logoutStaffService() {
-  await clearAuthSession();
+export async function logoutService() {
+  const response = await apiClient.post("/auth/logout");
+  return response.data;
 }

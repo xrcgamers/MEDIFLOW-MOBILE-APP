@@ -1,37 +1,31 @@
 import axios from "axios";
-import { API_BASE_URL } from "../config/api";
-import { getStoredToken, clearAuthSession } from "../services/tokenStorage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const AUTH_STORAGE_KEY = "mediflow_auth_token";
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
+  baseURL: "http://localhost:5000/api",
 });
 
-apiClient.interceptors.request.use(
-  async (config) => {
-    const token = await getStoredToken();
+apiClient.interceptors.request.use(async (config) => {
+  const token = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
 
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  return config;
+});
 
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const status = error?.response?.status;
+  (error) => {
     const message =
       error?.response?.data?.message ||
+      error?.response?.data?.error ||
       error?.message ||
-      "Something went wrong.";
-
-    if (status === 401) {
-      await clearAuthSession();
-    }
+      "Request failed";
 
     return Promise.reject(new Error(message));
   }

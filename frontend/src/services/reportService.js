@@ -1,24 +1,47 @@
 import apiClient from "../api/client";
 
-export async function submitReportService(formData) {
+async function normalizePhotoForUpload(photo) {
+  if (!photo?.uri) return null;
+
+  const fileName = photo.fileName || `incident-${Date.now()}.jpg`;
+  const mimeType = photo.mimeType || "image/jpeg";
+
+  // Web needs a real File/Blob, not React Native's { uri, name, type } object
+  if (typeof window !== "undefined") {
+    const response = await fetch(photo.uri);
+    const blob = await response.blob();
+
+    return new File([blob], fileName, {
+      type: mimeType,
+    });
+  }
+
+  // Native Expo / Android / iOS
+  return {
+    uri: photo.uri,
+    name: fileName,
+    type: mimeType,
+  };
+}
+
+export async function createEmergencyReportService(form, photo) {
   const payload = new FormData();
 
-  payload.append("incidentType", formData.incidentType);
-  payload.append("otherIncidentType", formData.otherIncidentType.trim());
-  payload.append("autoLocationText", formData.autoLocationText.trim());
-  payload.append("manualLocationText", formData.manualLocationText.trim());
-  payload.append("latitude", String(formData.latitude ?? ""));
-  payload.append("longitude", String(formData.longitude ?? ""));
-  payload.append("victimCount", String(Number(formData.victimCount)));
-  payload.append("phoneNumber", formData.phoneNumber.trim());
-  payload.append("notes", formData.notes.trim());
+  payload.append("incidentType", form.incidentType || "");
+  payload.append("subIncidentType", form.subIncidentType || "");
+  payload.append("otherIncidentType", form.otherIncidentType || "");
+  payload.append("autoLocationText", form.autoLocationText || "");
+  payload.append("manualLocationText", form.manualLocationText || "");
+  payload.append("latitude", form.latitude || "");
+  payload.append("longitude", form.longitude || "");
+  payload.append("estimatedVictimCount", form.estimatedVictimCount || "1");
+  payload.append("phoneNumber", form.phoneNumber || "");
+  payload.append("notes", form.notes || "");
 
-  if (formData.capturedImage?.uri) {
-    payload.append("photo", {
-      uri: formData.capturedImage.uri,
-      name: formData.capturedImage.fileName || `report-photo-${Date.now()}.jpg`,
-      type: formData.capturedImage.mimeType || "image/jpeg",
-    });
+  const uploadPhoto = await normalizePhotoForUpload(photo);
+
+  if (uploadPhoto) {
+    payload.append("photo", uploadPhoto);
   }
 
   const response = await apiClient.post("/reports", payload, {
@@ -27,5 +50,18 @@ export async function submitReportService(formData) {
     },
   });
 
+  return response.data.data;
+}
+
+export async function trackIncidentByCodeService(payload) {
+  const response = await apiClient.post("/reports/track", payload);
+  return response.data.data;
+}
+
+export async function addPublicFollowUpNoteService(trackingCode, payload) {
+  const response = await apiClient.post(
+    `/reports/${trackingCode}/follow-up`,
+    payload
+  );
   return response.data.data;
 }

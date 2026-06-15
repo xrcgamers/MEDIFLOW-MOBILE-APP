@@ -5,6 +5,7 @@ import StatusBadge from "./StatusBadge";
 import AppButton from "./AppButton";
 import { addResourceActionService } from "../services/resourceService";
 import { useAppTheme } from "../context/ThemeContext";
+import { useToast } from "../context/ToastContext";
 
 function getResourceType(status) {
   switch (status) {
@@ -37,10 +38,13 @@ function getResourceIcon(category, status) {
 
 export default function ResourceCard({ item, onActionComplete }) {
   const { colors, radius, spacing, shadow } = useAppTheme();
+  const { showToast } = useToast();
   const type = getResourceType(item.status);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [activeAction, setActiveAction] = useState(null);
 
   const latestLog = item.actionLogs?.[0] || null;
+  const isSubmitting = !!activeAction;
 
   const accentStyle =
     type === "success"
@@ -54,8 +58,10 @@ export default function ResourceCard({ item, onActionComplete }) {
       : { borderLeftColor: colors.neutralText };
 
   const handleAction = async (actionType) => {
+    if (isSubmitting) return;
+
     try {
-      setIsSubmitting(true);
+      setActiveAction(actionType);
 
       const note =
         actionType === "ESCALATE"
@@ -67,21 +73,24 @@ export default function ResourceCard({ item, onActionComplete }) {
         note,
       });
 
-      Alert.alert(
-        "Action Recorded",
-        actionType === "ESCALATE"
-          ? "Resource has been escalated."
-          : "Resource has been marked as reviewed."
-      );
+      showToast({
+        title: actionType === "ESCALATE" ? "Resource Escalated" : "Resource Reviewed",
+        message:
+          actionType === "ESCALATE"
+            ? `${item.label} has been escalated successfully.`
+            : `${item.label} has been marked as reviewed.`,
+        type: "success",
+      });
 
-      onActionComplete?.();
+      await onActionComplete?.();
     } catch (error) {
-      Alert.alert(
-        "Action Failed",
-        error.message || "Unable to update resource action."
-      );
+      showToast({
+        title: "Action Failed",
+        message: error.message || "Unable to update resource action.",
+        type: "error",
+      });
     } finally {
-      setIsSubmitting(false);
+      setActiveAction(null);
     }
   };
 
@@ -128,6 +137,7 @@ export default function ResourceCard({ item, onActionComplete }) {
       >
         {item.label}
       </Text>
+
       <Text
         style={[styles.value, { color: colors.text }]}
         maxFontSizeMultiplier={1.5}
@@ -154,18 +164,21 @@ export default function ResourceCard({ item, onActionComplete }) {
           >
             Latest Action
           </Text>
+
           <Text
             style={[styles.logMeta, { color: colors.textMuted }]}
             maxFontSizeMultiplier={1.5}
           >
             {latestLog.actionType} • {latestLog.actorName || "Staff User"}
           </Text>
+
           <Text
             style={[styles.logMeta, { color: colors.textMuted }]}
             maxFontSizeMultiplier={1.5}
           >
             {new Date(latestLog.createdAt).toLocaleString()}
           </Text>
+
           {latestLog.note ? (
             <Text
               style={[styles.logNote, { color: colors.text }]}
@@ -180,19 +193,23 @@ export default function ResourceCard({ item, onActionComplete }) {
       <View style={styles.actionsRow}>
         <View style={styles.actionButton}>
           <AppButton
-            title={isSubmitting ? "Working..." : "Mark Reviewed"}
+            title={
+              activeAction === "MARK_REVIEWED" ? "Working..." : "Mark Reviewed"
+            }
             onPress={() => handleAction("MARK_REVIEWED")}
             variant="secondary"
             disabled={isSubmitting}
+            loading={activeAction === "MARK_REVIEWED"}
             accessibilityLabel={`Mark ${item.label} as reviewed`}
           />
         </View>
 
         <View style={styles.actionButton}>
           <AppButton
-            title={isSubmitting ? "Working..." : "Escalate"}
+            title={activeAction === "ESCALATE" ? "Working..." : "Escalate"}
             onPress={() => handleAction("ESCALATE")}
             disabled={isSubmitting}
+            loading={activeAction === "ESCALATE"}
             accessibilityLabel={`Escalate ${item.label}`}
           />
         </View>

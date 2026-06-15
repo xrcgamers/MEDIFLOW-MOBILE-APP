@@ -1,20 +1,20 @@
 const prisma = require("../config/prisma");
+const { createIncidentReport } = require("../services/reportCreationService");
 
-function generateTrackingCode() {
-  const randomPart = Math.floor(100000 + Math.random() * 900000);
-  return `MDF-${randomPart}`;
-}
-
-exports.createReport = async (req, res) => {
+async function createReport(req, res) {
   try {
+    console.log("REPORT BODY:", req.body);
+    console.log("REPORT FILE:", req.file);
+
     const {
       incidentType,
+      subIncidentType = null,
       otherIncidentType = "",
       autoLocationText = "",
       manualLocationText = "",
       latitude = null,
       longitude = null,
-      victimCount,
+      estimatedVictimCount,
       phoneNumber = "",
       notes = "",
     } = req.body;
@@ -26,119 +26,98 @@ exports.createReport = async (req, res) => {
       });
     }
 
-    if (!autoLocationText && !manualLocationText) {
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Location is required",
+        message: "Camera photo is required",
       });
     }
 
-    if (!victimCount || Number(victimCount) < 1) {
+    if (!manualLocationText && (!latitude || !longitude)) {
       return res.status(400).json({
         success: false,
-        message: "Victim count must be 1 or more",
+        message: "Coordinates or manual location are required",
       });
     }
 
-    const resolvedIncidentType =
-      incidentType === "Other" ? otherIncidentType.trim() : incidentType;
+    if (!estimatedVictimCount || Number(estimatedVictimCount) < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Estimated victim count must be 1 or more",
+      });
+    }
 
-    const resolvedLocationText =
-      manualLocationText.trim() || autoLocationText.trim();
+    if (!phoneNumber || !String(phoneNumber).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
 
-    const trackingCode = generateTrackingCode();
-
-    const uploadedFile = req.file || null;
-
-    const report = await prisma.report.create({
-      data: {
-        trackingCode,
-        incidentType,
-        otherIncidentType,
-        resolvedIncidentType,
-        autoLocationText,
-        manualLocationText,
-        resolvedLocationText,
-        latitude: latitude !== null && latitude !== "" ? Number(latitude) : null,
-        longitude: longitude !== null && longitude !== "" ? Number(longitude) : null,
-        victimCount: Number(victimCount),
-        phoneNumber,
-        notes,
-        mediaCount: uploadedFile ? 1 : 0,
-        status: "Received",
-        statusHistory: {
-          create: [
-            {
-              label: "Received",
-            },
-          ],
-        },
-        mediaAttachments: uploadedFile
-          ? {
-              create: [
-                {
-                  fileName: uploadedFile.filename,
-                  filePath: `/uploads/${uploadedFile.filename}`,
-                  mimeType: uploadedFile.mimetype,
-                  fileSize: uploadedFile.size,
-                },
-              ],
-            }
-          : undefined,
-      },
-      include: {
-        statusHistory: true,
-        mediaAttachments: true,
-      },
+    const incident = await createIncidentReport({
+      incidentType,
+      subIncidentType,
+      otherIncidentType,
+      autoLocationText,
+      manualLocationText,
+      latitude,
+      longitude,
+      estimatedVictimCount: Number(estimatedVictimCount),
+      phoneNumber: String(phoneNumber).trim(),
+      notes,
+      uploadedFile: req.file,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      data: report,
+      data: incident,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("CREATE REPORT ERROR:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Failed to create report",
       error: error.message,
     });
   }
-};
+}
 
-exports.getReportByTrackingCode = async (req, res) => {
+async function getReportByTrackingCode(req, res) {
   try {
     const { trackingCode } = req.params;
 
-    const report = await prisma.report.findUnique({
-      where: {
-        trackingCode,
-      },
+    const incident = await prisma.incident.findUnique({
+      where: { trackingCode },
       include: {
         statusHistory: {
-          orderBy: {
-            createdAt: "asc",
-          },
+          orderBy: { createdAt: "asc" },
         },
         mediaAttachments: true,
       },
     });
 
-    if (!report) {
+    if (!incident) {
       return res.status(404).json({
         success: false,
         message: "Report not found",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
-      data: report,
+      data: incident,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch report",
       error: error.message,
     });
   }
+}
+
+module.exports = {
+  createReport,
+  getReportByTrackingCode,
 };

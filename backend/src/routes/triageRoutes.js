@@ -1,8 +1,12 @@
 const express = require("express");
-const { assessTriage } = require("../controllers/triageController");
+const {
+  createTriageForPatient,
+  getPatientTriageHistory,
+} = require("../controllers/triageController");
 
 const router = express.Router();
 
-router.post("/assess", assessTriage);
+router.post("/patients/:patientId/triage", createTriageForPatient);
+router.get("/patients/:patientId/triage-history", getPatientTriageHistory);
 
 module.exports = router;

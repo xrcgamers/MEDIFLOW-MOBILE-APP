@@ -1,132 +1,117 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ScrollView,
   Text,
   StyleSheet,
   View,
-  FlatList,
   RefreshControl,
   Pressable,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { INCIDENT_STATUS_FILTERS } from "../../src/constants/incidentFilters";
-import { INCIDENT_SORT_OPTIONS } from "../../src/constants/incidentSortOptions";
-import { INCIDENT_PRIORITY_FILTERS } from "../../src/constants/incidentPriorityFilters";
-import IncidentCard from "../../src/components/IncidentCard";
-import FormSelect from "../../src/components/FormSelect";
+import { router } from "expo-router";
+import PageHeader from "../../src/components/PageHeader";
 import FormSection from "../../src/components/FormSection";
 import FormInput from "../../src/components/FormInput";
+import FormSelect from "../../src/components/FormSelect";
+import EmptyStateCard from "../../src/components/EmptyStateCard";
+import StatusBadge from "../../src/components/StatusBadge";
 import StaffNavBar from "../../src/components/StaffNavBar";
-import PageHeader from "../../src/components/PageHeader";
-import BackNavButton from "../../src/components/BackNavButton";
-import { getIncidentsService } from "../../src/services/staffIncidentService";
-import { API_ROOT_URL } from "../../src/config/api";
-import { computeIncidentPriority } from "../../src/utils/priority";
+import AppButton from "../../src/components/AppButton";
+import ThemeModeToggle from "../../src/components/ThemeModeToggle";
+import { useAuth } from "../../src/context/AuthContext";
 import { useAppTheme } from "../../src/context/ThemeContext";
+import { useToast } from "../../src/context/ToastContext";
+import { getIncidentsService } from "../../src/services/staffIncidentService";
+import RoleGuard from "../../src/components/RoleGuard";
+import AdminReturnButton from "../../src/components/AdminReturnButton";
 
-const AUTO_REFRESH_INTERVAL = 15000;
-const NEW_REPORT_BANNER_DURATION = 5000;
+const STATUS_OPTIONS = [
+  { label: "All Statuses", value: "" },
+  { label: "Received", value: "RECEIVED" },
+  { label: "Under Review", value: "UNDER_REVIEW" },
+  { label: "Accepted", value: "ACCEPTED" },
+  { label: "Response In Progress", value: "RESPONSE_IN_PROGRESS" },
+  { label: "Rejected", value: "REJECTED" },
+  { label: "Cancelled", value: "CANCELLED" },
+  { label: "Closed", value: "CLOSED" },
+];
 
-function enrichIncident(item) {
-  const firstMedia = item.mediaAttachments?.[0];
-  const latestTriage = item.triageAssessments?.[0];
-  const priority = computeIncidentPriority(item, latestTriage);
-
-  return {
-    ...item,
-    incidentType: item.resolvedIncidentType || item.incidentType,
-    location: item.resolvedLocationText,
-    victims: item.victimCount,
-    reportedAt: new Date(item.createdAt).toLocaleString(),
-    mediaCount: item.mediaCount || 0,
-    evidenceImageUrl: firstMedia ? `${API_ROOT_URL}${firstMedia.filePath}` : null,
-    triageUrgency: latestTriage?.urgency || null,
-    priorityLevel: priority.level,
-    priorityScore: priority.score,
-  };
-}
-
-function sortIncidents(incidents, sortOption) {
-  const sorted = [...incidents];
-
-  switch (sortOption) {
-    case "Oldest First":
-      return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    case "Highest Victims":
-      return sorted.sort((a, b) => b.victimCount - a.victimCount);
-    case "Lowest Victims":
-      return sorted.sort((a, b) => a.victimCount - b.victimCount);
-    case "Highest Priority":
-      return sorted.sort((a, b) => {
-        if ((b.priorityScore || 0) !== (a.priorityScore || 0)) {
-          return (b.priorityScore || 0) - (a.priorityScore || 0);
-        }
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    case "Lowest Priority":
-      return sorted.sort((a, b) => {
-        if ((a.priorityScore || 0) !== (b.priorityScore || 0)) {
-          return (a.priorityScore || 0) - (b.priorityScore || 0);
-        }
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-    case "Newest First":
+function getStatusType(status) {
+  switch (status) {
+    case "ACCEPTED":
+    case "CLOSED":
+      return "success";
+    case "UNDER_REVIEW":
+    case "RESPONSE_IN_PROGRESS":
+      return "warning";
+    case "REJECTED":
+    case "CANCELLED":
+      return "danger";
+    case "RECEIVED":
     default:
-      return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return "info";
   }
 }
 
-export default function IncidentsScreen() {
-  const { colors, spacing, typography, radius } = useAppTheme();
-  const params = useLocalSearchParams();
+function getPriorityType(level) {
+  switch (level) {
+    case "CRITICAL":
+      return "danger";
+    case "HIGH":
+      return "warning";
+    case "MODERATE":
+      return "info";
+    case "LOW":
+    default:
+      return "neutral";
+  }
+}
 
-  const [selectedFilter, setSelectedFilter] = useState(params.status || "All");
-  const [selectedSort, setSelectedSort] = useState("Newest First");
-  const [selectedPriority, setSelectedPriority] = useState(params.priority || "All");
-  const [searchQuery, setSearchQuery] = useState("");
+function getIncidentContextLabel(incident) {
+  if (!incident) return "No incident context";
+  if (incident.subIncidentType) {
+    return `${incident.incidentType || "Incident"} • ${incident.subIncidentType}`;
+  }
+  return incident.incidentType || "Incident context available";
+}
+
+function summarizeIncidentRequests(incident) {
+  const patients = incident?.patients || [];
+  const requests = patients.flatMap((patient) => patient.resourceRequests || []);
+
+  return {
+    total: requests.length,
+    partial: requests.filter((item) => item.requestStatus === "PARTIALLY_ALLOCATED").length,
+    reserved: requests.filter((item) => item.requestStatus === "RESERVED").length,
+    completed: requests.filter((item) => item.requestStatus === "COMPLETED").length,
+  };
+}
+
+export default function IncidentsScreen() {
+  const { user, logout } = useAuth();
+  const { colors, typography, radius, spacing, shadow } = useAppTheme();
+  const { showToast } = useToast();
+
   const [incidents, setIncidents] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState(null);
-  const [showNewReportBanner, setShowNewReportBanner] = useState(false);
-  const [newReportCount, setNewReportCount] = useState(0);
-  const [activeTriageUrgencyFilter, setActiveTriageUrgencyFilter] = useState(
-    params.triageUrgency || ""
-  );
 
-  const previousCountRef = useRef(0);
-  const bannerTimeoutRef = useRef(null);
-
-  const loadIncidents = async (isPullRefresh = false) => {
+  const loadIncidents = async (refresh = false) => {
     try {
-      if (isPullRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading((prev) => (incidents.length === 0 ? true : prev));
-      }
+      refresh ? setIsRefreshing(true) : setIsLoading(true);
 
-      const data = await getIncidentsService();
+      const data = await getIncidentsService({
+        ...(statusFilter ? { status: statusFilter } : {}),
+      });
 
-      if (previousCountRef.current > 0 && data.length > previousCountRef.current) {
-        const difference = data.length - previousCountRef.current;
-        setNewReportCount(difference);
-        setShowNewReportBanner(true);
-
-        if (bannerTimeoutRef.current) {
-          clearTimeout(bannerTimeoutRef.current);
-        }
-
-        bannerTimeoutRef.current = setTimeout(() => {
-          setShowNewReportBanner(false);
-          setNewReportCount(0);
-        }, NEW_REPORT_BANNER_DURATION);
-      }
-
-      previousCountRef.current = data.length;
-      setIncidents(data);
-      setLastRefreshed(new Date());
+      setIncidents(data || []);
     } catch (error) {
-      console.error("Failed to load incidents:", error.message);
+      showToast({
+        title: "Load Failed",
+        message: error.message || "Unable to load incidents.",
+        type: "error",
+      });
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -135,394 +120,316 @@ export default function IncidentsScreen() {
 
   useEffect(() => {
     loadIncidents();
-
-    const intervalId = setInterval(() => {
-      loadIncidents();
-    }, AUTO_REFRESH_INTERVAL);
-
-    return () => {
-      clearInterval(intervalId);
-      if (bannerTimeoutRef.current) {
-        clearTimeout(bannerTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [statusFilter]);
 
   const filteredIncidents = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
+    if (!q) return incidents;
 
-    const filtered = incidents
-      .map(enrichIncident)
-      .filter((incident) => {
-        const matchesFilter =
-          selectedFilter === "All" || incident.status === selectedFilter;
+    return incidents.filter((incident) => {
+      const context = getIncidentContextLabel(incident).toLowerCase();
+      const location = (
+        incident.resolvedLocationText ||
+        incident.manualLocationText ||
+        incident.autoLocationText ||
+        ""
+      ).toLowerCase();
 
-        const matchesPriority =
-          selectedPriority === "All" || incident.priorityLevel === selectedPriority;
-
-        const matchesTriageUrgency =
-          !activeTriageUrgencyFilter ||
-          incident.triageUrgency === activeTriageUrgencyFilter;
-
-        const incidentType = (incident.incidentType || "").toLowerCase();
-        const location = (incident.location || "").toLowerCase();
-        const trackingCode = (incident.trackingCode || "").toLowerCase();
-
-        const matchesSearch =
-          !normalizedQuery ||
-          trackingCode.includes(normalizedQuery) ||
-          incidentType.includes(normalizedQuery) ||
-          location.includes(normalizedQuery);
-
-        return (
-          matchesFilter &&
-          matchesPriority &&
-          matchesSearch &&
-          matchesTriageUrgency
-        );
-      });
-
-    return sortIncidents(filtered, selectedSort);
-  }, [
-    incidents,
-    selectedFilter,
-    selectedSort,
-    selectedPriority,
-    searchQuery,
-    activeTriageUrgencyFilter,
-  ]);
-
-  const handleViewDetails = (incident) => {
-    router.push({
-      pathname: "/staff/incident-details",
-      params: { id: incident.id },
+      return [
+        incident.trackingCode,
+        context,
+        location,
+        incident.phoneNumber,
+        incident.status,
+        incident.aiAssessment?.priorityLevel,
+        incident.queuePriority?.finalPriorityLevel,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
     });
+  }, [incidents, search]);
+
+  const summary = useMemo(() => {
+    return {
+      total: filteredIncidents.length,
+      criticalAi: filteredIncidents.filter(
+        (item) => item.aiAssessment?.priorityLevel === "CRITICAL"
+      ).length,
+      partialPressure: filteredIncidents.filter((item) => {
+        const requestSummary = summarizeIncidentRequests(item);
+        return requestSummary.partial > 0;
+      }).length,
+      reservedPressure: filteredIncidents.filter((item) => {
+        const requestSummary = summarizeIncidentRequests(item);
+        return requestSummary.reserved > 0;
+      }).length,
+    };
+  }, [filteredIncidents]);
+
+  const sortedIncidents = useMemo(() => {
+    return [...filteredIncidents].sort((a, b) => {
+      const aRank = a.queuePriority?.manualOverrideRank ?? Number.MAX_SAFE_INTEGER;
+      const bRank = b.queuePriority?.manualOverrideRank ?? Number.MAX_SAFE_INTEGER;
+
+      if (aRank !== bRank) return aRank - bRank;
+
+      const aScore = a.queuePriority?.finalPriorityScore ?? -1;
+      const bScore = b.queuePriority?.finalPriorityScore ?? -1;
+
+      if (aScore !== bScore) return bScore - aScore;
+
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [filteredIncidents]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/auth/login");
   };
-
-  const handleClearFilters = () => {
-    setSelectedFilter("All");
-    setSelectedPriority("All");
-    setActiveTriageUrgencyFilter("");
-    setSearchQuery("");
-  };
-
-  const bannerLabel =
-    newReportCount === 1
-      ? "1 new report received"
-      : `${newReportCount} new reports received`;
-
-  const hasActiveRouteFilters =
-    selectedFilter !== "All" ||
-    selectedPriority !== "All" ||
-    !!activeTriageUrgencyFilter ||
-    !!searchQuery;
 
   return (
+    <RoleGuard allowedRoles={["EMERGENCY_NURSE"]}>
     <>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <FlatList
-          data={isLoading ? [] : filteredIncidents}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <IncidentCard incident={item} onViewDetails={handleViewDetails} />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={() => loadIncidents(true)}
-            />
-          }
-          ListHeaderComponent={
-            <>
-              <BackNavButton label="Back to Staff Home" fallbackRoute="/staff" />
-
-              <PageHeader
-                eyebrow="Incident Review"
-                title="Incoming Reports"
-                subtitle="Review newly submitted public emergency reports."
-                icon="document-text-outline"
-              />
-
-              <FormSection title="Quick Navigation">
-                <View style={styles.quickNavWrap}>
-                  {[
-                    { label: "Staff Home", icon: "home-outline", route: "/staff" },
-                    { label: "Open Triage", icon: "pulse-outline", route: "/staff/triage" },
-                    { label: "Resources", icon: "layers-outline", route: "/staff/resources" },
-                    { label: "Settings", icon: "settings-outline", route: "/staff/settings" },
-                  ].map((item) => (
-                    <Pressable
-                      key={item.route}
-                      style={[
-                        styles.quickNavButton,
-                        {
-                          backgroundColor: colors.surfaceMuted,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                      onPress={() => router.push(item.route)}
-                    >
-                      <Ionicons
-                        name={item.icon}
-                        size={18}
-                        color={colors.primaryDark}
-                        style={styles.quickNavIcon}
-                      />
-                      <Text
-                        style={[
-                          typography.label,
-                          { color: colors.primaryDark },
-                        ]}
-                        maxFontSizeMultiplier={1.7}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </FormSection>
-
-              {activeTriageUrgencyFilter ? (
-                <View
-                  style={[
-                    styles.filterBanner,
-                    {
-                      backgroundColor: colors.surfaceMuted,
-                      borderColor: colors.border,
-                      borderRadius: radius.md,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="funnel-outline"
-                    size={18}
-                    color={colors.primaryDark}
-                    style={styles.bannerIcon}
-                  />
-                  <Text
-                    style={[typography.body, { color: colors.text }]}
-                    maxFontSizeMultiplier={1.8}
-                  >
-                    Filtered to triage urgency: {activeTriageUrgencyFilter}
-                  </Text>
-                </View>
-              ) : null}
-
-              {showNewReportBanner ? (
-                <View
-                  style={[
-                    styles.banner,
-                    {
-                      backgroundColor: colors.infoBg,
-                      borderColor: colors.border,
-                      borderRadius: radius.md,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="notifications"
-                    size={18}
-                    color={colors.primaryDark}
-                    style={styles.bannerIcon}
-                  />
-                  <Text
-                    style={[typography.body, { color: colors.primaryDark, fontWeight: "700" }]}
-                    maxFontSizeMultiplier={1.8}
-                  >
-                    {bannerLabel}
-                  </Text>
-                </View>
-              ) : null}
-
-              <FormSection title="Find Reports">
-                <FormInput
-                  label="Search"
-                  placeholder="Search by tracking code, type, or location"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-
-                <FormSelect
-                  label="Status Filter"
-                  selectedValue={selectedFilter}
-                  onValueChange={setSelectedFilter}
-                  options={INCIDENT_STATUS_FILTERS}
-                  placeholder="Select status"
-                />
-
-                <FormSelect
-                  label="Priority Filter"
-                  selectedValue={selectedPriority}
-                  onValueChange={setSelectedPriority}
-                  options={INCIDENT_PRIORITY_FILTERS}
-                  placeholder="Select priority"
-                />
-
-                <FormSelect
-                  label="Sort By"
-                  selectedValue={selectedSort}
-                  onValueChange={setSelectedSort}
-                  options={INCIDENT_SORT_OPTIONS}
-                  placeholder="Select sort option"
-                />
-
-                {hasActiveRouteFilters ? (
-                  <Pressable
-                    style={[
-                      styles.clearButton,
-                      {
-                        borderRadius: radius.md,
-                        backgroundColor: colors.infoBg,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    onPress={handleClearFilters}
-                  >
-                    <Ionicons
-                      name="close-circle-outline"
-                      size={18}
-                      color={colors.primaryDark}
-                      style={styles.clearIcon}
-                    />
-                    <Text
-                      style={[typography.label, { color: colors.primaryDark }]}
-                      maxFontSizeMultiplier={1.7}
-                    >
-                      Clear active filters
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </FormSection>
-
-              <View style={styles.headerInfo}>
-                <Text
-                  style={[styles.refreshHint, { color: colors.textMuted }]}
-                  maxFontSizeMultiplier={1.7}
-                >
-                  Auto-refreshes every 15 seconds
-                </Text>
-                <Text
-                  style={[styles.lastRefreshed, { color: colors.textMuted }]}
-                  maxFontSizeMultiplier={1.7}
-                >
-                  Last refreshed:{" "}
-                  {lastRefreshed
-                    ? lastRefreshed.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })
-                    : "Not yet loaded"}
-                </Text>
-              </View>
-
-              {isLoading ? (
-                <View style={styles.emptyState}>
-                  <Text
-                    style={[typography.body, { color: colors.textMuted }]}
-                    maxFontSizeMultiplier={1.8}
-                  >
-                    Loading reports...
-                  </Text>
-                </View>
-              ) : null}
-            </>
-          }
-          ListEmptyComponent={
-            !isLoading ? (
-              <View style={styles.emptyState}>
-                <Text
-                  style={[typography.body, { color: colors.textMuted }]}
-                  maxFontSizeMultiplier={1.8}
-                >
-                  No reports found for the current search or filter.
-                </Text>
-              </View>
-            ) : null
-          }
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={() => loadIncidents(true)} />
+        }
+      >
+        <PageHeader
+          eyebrow="Clinical Operations"
+          title="Incident Queue"
+          subtitle="Review incidents by context, AI priority, and operational pressure."
+          icon="list-outline"
         />
-      </View>
+
+        <AdminReturnButton />
+
+        <FormSection title="Appearance">
+          <ThemeModeToggle />
+        </FormSection>
+
+        <FormSection title="Account Details">
+          <Text style={[typography.body, { color: colors.text }]}>Name: {user?.name}</Text>
+          <Text style={[typography.body, { color: colors.text }]}>Account Type: {user?.role}</Text>
+          <Text style={[typography.body, { color: colors.text }]}>Email: {user?.email}</Text>
+          <AppButton title="Logout" onPress={handleLogout} variant="secondary" />
+        </FormSection>
+
+        <FormSection title="Queue Overview">
+          {isLoading ? (
+            <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
+          ) : (
+            <View style={styles.summaryWrap}>
+              <SummaryCard label="Visible Incidents" value={summary.total} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Critical AI" value={summary.criticalAi} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Partial Pressure" value={summary.partialPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Reserved Pressure" value={summary.reservedPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+            </View>
+          )}
+        </FormSection>
+
+        <FormSection title="Filters">
+          <FormInput
+            label="Search Queue"
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by code, type, subtype, location, priority..."
+          />
+
+          <FormSelect
+            label="Status Filter"
+            selectedValue={statusFilter}
+            onValueChange={setStatusFilter}
+            options={STATUS_OPTIONS}
+            placeholder="Select status"
+          />
+        </FormSection>
+
+        <FormSection title="Incidents">
+          {isLoading ? (
+            <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
+          ) : sortedIncidents.length ? (
+            sortedIncidents.map((incident) => {
+              const patientCount = (incident.patients || []).length;
+              const requestSummary = summarizeIncidentRequests(incident);
+
+              return (
+                <Pressable
+                  key={incident.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/staff/incident-details",
+                      params: { id: incident.id },
+                    })
+                  }
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      padding: spacing.md,
+                    },
+                    shadow,
+                  ]}
+                >
+                  <View style={styles.headerRow}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>
+                      {incident.trackingCode}
+                    </Text>
+                    <StatusBadge
+                      label={incident.status}
+                      type={getStatusType(incident.status)}
+                    />
+                  </View>
+
+                  <View style={styles.badgeRow}>
+                    {incident.aiAssessment?.priorityLevel ? (
+                      <StatusBadge
+                        label={`AI ${incident.aiAssessment.priorityLevel}`}
+                        type={getPriorityType(incident.aiAssessment.priorityLevel)}
+                      />
+                    ) : null}
+
+                    {incident.queuePriority?.finalPriorityLevel ? (
+                      <StatusBadge
+                        label={`QUEUE ${incident.queuePriority.finalPriorityLevel}`}
+                        type={getPriorityType(incident.queuePriority.finalPriorityLevel)}
+                      />
+                    ) : null}
+
+                    {incident.subIncidentType ? (
+                      <StatusBadge label="Subtype Context" type="info" />
+                    ) : null}
+                  </View>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Context: {getIncidentContextLabel(incident)}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Location:{" "}
+                    {incident.resolvedLocationText ||
+                      incident.manualLocationText ||
+                      incident.autoLocationText ||
+                      "Unknown"}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Estimated Patients: {incident.estimatedVictimCount ?? 0}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Linked Patients: {patientCount}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Queue Score: {incident.queuePriority?.finalPriorityScore ?? "Not set"}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    Manual Rank: {incident.queuePriority?.manualOverrideRank ?? "None"}
+                  </Text>
+
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={[typography.body, { color: colors.textMuted }]}>
+                      Resource Pressure:
+                    </Text>
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Total Requests: {requestSummary.total}
+                    </Text>
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Partial Allocations: {requestSummary.partial}
+                    </Text>
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Reserved: {requestSummary.reserved}
+                    </Text>
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Completed: {requestSummary.completed}
+                    </Text>
+                  </View>
+
+                  <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+                    Created: {new Date(incident.createdAt).toLocaleString()}
+                  </Text>
+                </Pressable>
+              );
+            })
+          ) : (
+            <EmptyStateCard
+              title="No Incidents Found"
+              message="No incidents match the current search or filter."
+              icon="list-outline"
+            />
+          )}
+        </FormSection>
+      </ScrollView>
 
       <StaffNavBar activeRoute="/staff/incidents" />
     </>
+    </RoleGuard>
+  );
+}
+
+function SummaryCard({ label, value, colors, typography, radius, spacing, shadow }) {
+  return (
+    <View
+      style={[
+        styles.summaryCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+        },
+        shadow,
+      ]}
+    >
+      <Text style={[typography.label, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { color: colors.text }]}>{value}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
     paddingBottom: 110,
+    flexGrow: 1,
   },
-  listContent: {
-    paddingBottom: 20,
-  },
-  quickNavWrap: {
+  summaryWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 12,
   },
-  quickNavButton: {
-    flexDirection: "row",
-    alignItems: "center",
+  summaryCard: {
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginRight: 10,
-    marginBottom: 10,
-    minHeight: 44,
+    minWidth: 150,
   },
-  quickNavIcon: {
-    marginRight: 6,
+  summaryValue: {
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 6,
   },
-  headerInfo: {
-    marginBottom: 10,
-  },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
+  card: {
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  filterBanner: {
+  headerRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 14,
+    gap: 8,
+    marginBottom: 8,
   },
-  bannerIcon: {
-    marginRight: 8,
-  },
-  clearButton: {
-    marginTop: 8,
+  badgeRow: {
     flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
+    flexWrap: "wrap",
+    marginBottom: 8,
   },
-  clearIcon: {
-    marginRight: 6,
-  },
-  emptyState: {
-    paddingVertical: 24,
-    alignItems: "center",
-  },
-  refreshHint: {
-    fontSize: 12,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  lastRefreshed: {
-    fontSize: 12,
-    textAlign: "center",
-    marginBottom: 6,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "800",
   },
 });

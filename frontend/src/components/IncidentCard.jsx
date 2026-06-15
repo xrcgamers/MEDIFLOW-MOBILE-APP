@@ -35,6 +35,19 @@ function getUrgencyType(urgency) {
   }
 }
 
+function getAiPriorityType(level) {
+  switch (level) {
+    case "Critical":
+      return "danger";
+    case "High":
+      return "warning";
+    case "Moderate":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
+
 export default function IncidentCard({ incident, onViewDetails }) {
   const { colors, radius, spacing, shadow } = useAppTheme();
 
@@ -62,6 +75,7 @@ export default function IncidentCard({ incident, onViewDetails }) {
         >
           {incident.incidentType}
         </Text>
+
         <StatusBadge
           label={incident.status}
           type={getStatusType(incident.status)}
@@ -69,9 +83,16 @@ export default function IncidentCard({ incident, onViewDetails }) {
       </View>
 
       <View style={styles.badgeRow}>
+        {incident.aiPriorityLevel ? (
+          <StatusBadge
+            label={`AI: ${incident.aiPriorityLevel} (${incident.aiPriorityConfidence || 0}%)`}
+            type={getAiPriorityType(incident.aiPriorityLevel)}
+          />
+        ) : null}
+
         {incident.priorityLevel ? (
           <StatusBadge
-            label={`Priority: ${incident.priorityLevel}`}
+            label={`Rule: ${incident.priorityLevel}`}
             type={getPriorityType(incident.priorityLevel)}
           />
         ) : null}
@@ -110,21 +131,42 @@ export default function IncidentCard({ incident, onViewDetails }) {
         </View>
       )}
 
-      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
         Tracking Code: {incident.trackingCode}
       </Text>
-      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
-        Location: {incident.location}
+
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
+        Location: {incident.location || "Not available"}
       </Text>
-      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
         Victims: {incident.victims}
       </Text>
-      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
+
+      <Text
+        style={[styles.meta, { color: colors.textMuted }]}
+        maxFontSizeMultiplier={1.6}
+      >
         Reported At: {incident.reportedAt}
       </Text>
-      <Text style={[styles.meta, { color: colors.textMuted }]} maxFontSizeMultiplier={1.6}>
-        Evidence: {incident.mediaCount > 0 ? `${incident.mediaCount} file(s)` : "None"}
-      </Text>
+
+      {incident.aiRiskFactors?.length ? (
+        <Text
+          style={[styles.meta, { color: colors.textMuted }]}
+          maxFontSizeMultiplier={1.6}
+        >
+          AI factors: {incident.aiRiskFactors.join(", ")}
+        </Text>
+      ) : null}
 
       <AppButton
         title="View Details"
@@ -146,7 +188,6 @@ const styles = StyleSheet.create({
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
     marginBottom: 10,
   },
   title: {
