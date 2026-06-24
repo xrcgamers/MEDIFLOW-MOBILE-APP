@@ -22,6 +22,9 @@ const { createPatientTriage } = require("../controllers/triageController");
 const {
   createPatientResourceRequest,
 } = require("../controllers/resourceRequestController");
+const {
+  updatePatientOutcome,
+} = require("../controllers/patientOutcomeController");
 
 const { requireAuth } = require("../middleware/authMiddleware");
 const { authorizeRoles } = require("../middleware/authorizeRoles");
@@ -127,6 +130,13 @@ router.post(
   requireAuth,
   authorizeRoles("ADMIN", "TRIAGE_NURSE"),
   mustBeFn("createPatientResourceRequest", createPatientResourceRequest)
+);
+
+router.patch(
+  "/patients/:patientId/outcome",
+  requireAuth,
+  authorizeRoles("ADMIN", "TRIAGE_NURSE", "EMERGENCY_NURSE"),
+  mustBeFn("updatePatientOutcome", updatePatientOutcome)
 );
 
 /**

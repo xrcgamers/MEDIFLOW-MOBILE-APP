@@ -38,35 +38,108 @@ function deriveInventoryStatus(item, availableQuantity) {
 
   const available = Number(availableQuantity);
   const current = Number(item.currentQuantity || 0);
-  const unit = String(item.unitOfMeasure || "").toLowerCase();
   const categoryName = String(item.category?.name || "").toUpperCase();
+  const unit = String(item.unitOfMeasure || "").toLowerCase();
 
-  const isReusableUnit =
+  const reusable =
     ["IMAGING", "THEATRE"].includes(categoryName) ||
-    [
-      "unit",
-      "units",
-      "room",
-      "rooms",
-      "machine",
-      "machines",
-      "scanner",
-      "scanners",
-    ].includes(unit);
+    ["unit", "units", "room", "rooms", "machine", "scanner"].includes(unit);
 
   if (available <= 0) return "RESERVED";
-
-  if (isReusableUnit && available >= 1) {
-    return "AVAILABLE";
-  }
-
+  if (reusable && available >= 1) return "AVAILABLE";
   if (available <= 2) return "CRITICAL";
-
   if (current > 0 && available / current <= 0.25) return "LOW";
-
   if (available <= 5) return "LOW";
 
   return "AVAILABLE";
+}
+
+async function releaseReusablePatientAllocations({
+  tx,
+  patientId,
+  categories,
+  reason,
+  changedByUserId,
+}) {
+  const allocations = await tx.resourceAllocation.findMany({
+    where: {
+      allocationStatus: "ACTIVE",
+      resourceRequest: {
+        patientId,
+        resourceCategory: {
+          name: {
+            in: categories,
+          },
+        },
+      },
+    },
+    include: {
+      resourceItem: {
+        include: {
+          category: true,
+        },
+      },
+      resourceRequest: {
+        include: {
+          resourceCategory: true,
+        },
+      },
+    },
+  });
+
+  for (const allocation of allocations) {
+    const item = allocation.resourceItem;
+
+    const restoredQty =
+      item.availableQuantity === null || item.availableQuantity === undefined
+        ? null
+        : Number(item.availableQuantity) + Number(allocation.reservedQuantity || 1);
+
+    const nextStatus =
+      restoredQty === null ? item.status : deriveInventoryStatus(item, restoredQty);
+
+    await tx.resourceAllocation.update({
+      where: { id: allocation.id },
+      data: {
+        allocationStatus: "RELEASED",
+        releasedAt: new Date(),
+        releaseReason: reason,
+      },
+    });
+
+    await tx.resourceItem.update({
+      where: { id: item.id },
+      data: {
+        availableQuantity: restoredQty,
+        status: nextStatus,
+        statusEvents: {
+          create: {
+            oldStatus: item.status,
+            newStatus: nextStatus,
+            relatedPatientId: patientId,
+            changedByUserId: changedByUserId || null,
+            note: reason,
+          },
+        },
+      },
+    });
+
+    const nextFulfilled = Math.max(
+      0,
+      Number(allocation.resourceRequest.fulfilledQuantity || 0) -
+        Number(allocation.reservedQuantity || 1)
+    );
+
+    await tx.resourceRequest.update({
+      where: { id: allocation.resourceRequestId },
+      data: {
+        fulfilledQuantity: nextFulfilled,
+        requestStatus: nextFulfilled <= 0 ? "REQUESTED" : "PARTIALLY_ALLOCATED",
+      },
+    });
+  }
+
+  return allocations.length;
 }
 
 async function getResourceRequests(req, res) {
@@ -427,6 +500,7 @@ async function allocateResourceToRequest(req, res) {
       where: { id: requestId },
       include: {
         resourceCategory: true,
+        patient: true,
         allocations: true,
       },
     });
@@ -435,6 +509,24 @@ async function allocateResourceToRequest(req, res) {
       return res.status(404).json({
         success: false,
         message: "Resource request not found",
+      });
+    }
+
+    const requestedQuantity = Number(request.requestedQuantity || qty);
+    const alreadyFulfilled = Number(request.fulfilledQuantity || 0);
+    const remainingQuantity = requestedQuantity - alreadyFulfilled;
+
+    if (remainingQuantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This request has already received the requested quantity",
+      });
+    }
+
+    if (qty > remainingQuantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot allocate more than requested. Remaining quantity is ${remainingQuantity}.`,
       });
     }
 
@@ -471,21 +563,28 @@ async function allocateResourceToRequest(req, res) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const allocation = await tx.resourceAllocation.create({
-        data: {
-          resourceRequestId: request.id,
-          resourceItemId: item.id,
-          reservedQuantity: qty,
-          allocationStatus: "ACTIVE",
-        },
-        include: {
-          resourceItem: {
-            include: {
-              category: true,
-            },
-          },
-        },
-      });
+      const categoryName = request.resourceCategory.name;
+
+      if (categoryName === "IMAGING") {
+        await releaseReusablePatientAllocations({
+          tx,
+          patientId: request.patientId,
+          categories: ["BED"],
+          reason: "Bed released automatically because patient moved to imaging.",
+          changedByUserId: req.user?.id || null,
+        });
+      }
+
+      if (categoryName === "THEATRE") {
+        await releaseReusablePatientAllocations({
+          tx,
+          patientId: request.patientId,
+          categories: ["BED", "IMAGING"],
+          reason:
+            "Reusable allocation released automatically because patient moved to theatre.",
+          changedByUserId: req.user?.id || null,
+        });
+      }
 
       const nextAvailableQuantity =
         item.availableQuantity === null || item.availableQuantity === undefined
@@ -497,6 +596,24 @@ async function allocateResourceToRequest(req, res) {
           ? item.status
           : deriveInventoryStatus(item, nextAvailableQuantity);
 
+      const allocation = await tx.resourceAllocation.create({
+        data: {
+          resourceRequestId: request.id,
+          resourceItemId: item.id,
+          reservedQuantity: qty,
+          unitOfMeasureSnapshot: request.unitOfMeasureSnapshot || item.unitOfMeasure,
+          allocationStatus: "ACTIVE",
+          allocatedByUserId: req.user?.id || null,
+        },
+        include: {
+          resourceItem: {
+            include: {
+              category: true,
+            },
+          },
+        },
+      });
+
       await tx.resourceItem.update({
         where: { id: item.id },
         data: {
@@ -506,20 +623,22 @@ async function allocateResourceToRequest(req, res) {
             create: {
               oldStatus: item.status,
               newStatus: nextStatus,
+              relatedPatientId: request.patientId,
+              changedByUserId: req.user?.id || null,
               note: `${qty} ${item.unitOfMeasure || ""} allocated to request.`,
             },
           },
         },
       });
 
-      const fulfilledQuantity = Number(request.fulfilledQuantity || 0) + qty;
-      const requestedQuantity = Number(request.requestedQuantity || qty);
+      const fulfilledQuantity = alreadyFulfilled + qty;
 
       const updatedRequest = await tx.resourceRequest.update({
         where: { id: request.id },
         data: {
           primaryResourceItemId: item.id,
           fulfilledQuantity,
+          approvedQuantity: fulfilledQuantity,
           requestStatus:
             fulfilledQuantity >= requestedQuantity
               ? "RESERVED"
@@ -554,7 +673,7 @@ async function allocateResourceToRequest(req, res) {
           eventStatus: updatedRequest.requestStatus,
           note: `${request.resourceCategory.name} allocated from ${
             item.subType || item.label
-          }.`,
+          }. Quantity: ${qty}.`,
         },
       });
 
@@ -626,7 +745,7 @@ async function releaseResourceAllocation(req, res) {
         allocation.resourceItem.availableQuantity !== undefined
       ) {
         const restoredQty =
-          allocation.resourceItem.availableQuantity +
+          Number(allocation.resourceItem.availableQuantity) +
           Number(allocation.reservedQuantity || 1);
 
         const nextStatus = deriveInventoryStatus(
@@ -643,12 +762,29 @@ async function releaseResourceAllocation(req, res) {
               create: {
                 oldStatus: allocation.resourceItem.status,
                 newStatus: nextStatus,
+                relatedPatientId: allocation.resourceRequest.patientId,
+                changedByUserId: req.user?.id || null,
                 note: releaseReason || "Allocation released and stock restored.",
               },
             },
           },
         });
       }
+
+      const nextFulfilled = Math.max(
+        0,
+        Number(allocation.resourceRequest.fulfilledQuantity || 0) -
+          Number(allocation.reservedQuantity || 1)
+      );
+
+      await tx.resourceRequest.update({
+        where: { id: allocation.resourceRequestId },
+        data: {
+          fulfilledQuantity: nextFulfilled,
+          requestStatus:
+            nextFulfilled <= 0 ? "REQUESTED" : "PARTIALLY_ALLOCATED",
+        },
+      });
 
       return updatedAllocation;
     });

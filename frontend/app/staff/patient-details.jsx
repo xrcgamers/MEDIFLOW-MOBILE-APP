@@ -29,6 +29,7 @@ import {
   getResourceCategoriesService,
   updatePatientService,
   excludePatientFromIncidentService,
+  updatePatientOutcomeService,
 } from "../../src/services/staffIncidentService";
 import {
   claimPatientService,
@@ -55,6 +56,30 @@ const BLOOD_TYPE_OPTIONS = [
   { label: "AB-", value: "AB-" },
   { label: "O+", value: "O+" },
   { label: "O-", value: "O-" },
+];
+
+const GCS_EYE_OPTIONS = [
+  { label: "4 - Spontaneous", value: "4" },
+  { label: "3 - To voice", value: "3" },
+  { label: "2 - To pain", value: "2" },
+  { label: "1 - None", value: "1" },
+];
+
+const GCS_VERBAL_OPTIONS = [
+  { label: "5 - Oriented", value: "5" },
+  { label: "4 - Confused", value: "4" },
+  { label: "3 - Inappropriate words", value: "3" },
+  { label: "2 - Incomprehensible sounds", value: "2" },
+  { label: "1 - None", value: "1" },
+];
+
+const GCS_MOTOR_OPTIONS = [
+  { label: "6 - Obeys commands", value: "6" },
+  { label: "5 - Localizes pain", value: "5" },
+  { label: "4 - Withdraws from pain", value: "4" },
+  { label: "3 - Abnormal flexion", value: "3" },
+  { label: "2 - Extension", value: "2" },
+  { label: "1 - None", value: "1" },
 ];
 
 function getPriorityType(level) {
@@ -102,6 +127,22 @@ function getCategoryBadgeType(categoryName) {
   }
 }
 
+function getPatientStatusType(status) {
+  switch (status) {
+    case "DISCHARGED":
+    case "UNDER_TREATMENT":
+      return "success";
+    case "DECEASED":
+    case "INVALID":
+    case "EXCLUDED":
+      return "danger";
+    case "TRIAGED":
+      return "info";
+    default:
+      return "warning";
+  }
+}
+
 function getIncidentContextLabel(incident) {
   if (!incident) return "No incident context";
   if (incident.subIncidentType) {
@@ -122,6 +163,7 @@ export default function PatientDetailsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [isReleasingClaim, setIsReleasingClaim] = useState(false);
+  const [isUpdatingOutcome, setIsUpdatingOutcome] = useState(false);
 
   const [identityForm, setIdentityForm] = useState({
     fullName: "",
@@ -136,9 +178,25 @@ export default function PatientDetailsScreen() {
     notBreathingNormally: false,
     severeBleeding: false,
     multipleVictimsContext: false,
+    airwayCompromised: false,
+    cannotWalk: false,
+    chestPain: false,
+    suspectedStroke: false,
+    majorBurn: false,
+    seizure: false,
+    pregnancyEmergency: false,
     painScore: "",
+    respiratoryRate: "",
+    oxygenSaturation: "",
+    systolicBp: "",
+    heartRate: "",
+    capillaryRefillSeconds: "",
+    eyeOpening: "",
+    verbalResponse: "",
+    motorResponse: "",
     note: "",
   });
+
   const [isSubmittingTriage, setIsSubmittingTriage] = useState(false);
 
   const [resourceForm, setResourceForm] = useState({
@@ -170,7 +228,8 @@ export default function PatientDetailsScreen() {
         fullName: patientData?.fullName || "",
         sex: patientData?.sex || "",
         estimatedAge:
-          patientData?.estimatedAge === null || patientData?.estimatedAge === undefined
+          patientData?.estimatedAge === null ||
+          patientData?.estimatedAge === undefined
             ? ""
             : String(patientData.estimatedAge),
       });
@@ -215,13 +274,11 @@ export default function PatientDetailsScreen() {
     try {
       setIsClaiming(true);
       await claimPatientService(patientId);
-
       showToast({
         title: "Patient Claimed",
         message: "This patient is now assigned to you.",
         type: "success",
       });
-
       await loadPatient(true);
     } catch (error) {
       showToast({
@@ -238,13 +295,11 @@ export default function PatientDetailsScreen() {
     try {
       setIsReleasingClaim(true);
       await releasePatientClaimService(patientId);
-
       showToast({
         title: "Claim Released",
         message: "Patient returned to the unassigned queue.",
         type: "success",
       });
-
       await loadPatient(true);
     } catch (error) {
       showToast({
@@ -259,7 +314,6 @@ export default function PatientDetailsScreen() {
 
   const handleToggleBoolean = (key) => {
     if (!canEdit) return;
-
     setTriageForm((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -271,7 +325,6 @@ export default function PatientDetailsScreen() {
 
     try {
       setIsSavingIdentity(true);
-
       await updatePatientService(patientId, {
         fullName: identityForm.fullName.trim() || null,
         sex: identityForm.sex.trim() || null,
@@ -325,6 +378,64 @@ export default function PatientDetailsScreen() {
     }
   };
 
+  const handleOutcome = async (status) => {
+    if (!canEdit) return;
+
+    try {
+      setIsUpdatingOutcome(true);
+
+      await updatePatientOutcomeService(patientId, {
+        status,
+        note: `Patient marked as ${status}.`,
+      });
+
+      showToast({
+        title: "Patient Status Updated",
+        message:
+          status === "DECEASED" || status === "DISCHARGED" || status === "INVALID"
+            ? "Reusable resources were released automatically where applicable."
+            : "Patient status updated.",
+        type: "success",
+      });
+
+      await loadPatient(true);
+    } catch (error) {
+      showToast({
+        title: "Outcome Update Failed",
+        message: error.message || "Unable to update patient outcome.",
+        type: "error",
+      });
+    } finally {
+      setIsUpdatingOutcome(false);
+    }
+  };
+
+  const resetTriageForm = () => {
+    setTriageForm({
+      unconscious: false,
+      notBreathingNormally: false,
+      severeBleeding: false,
+      multipleVictimsContext: false,
+      airwayCompromised: false,
+      cannotWalk: false,
+      chestPain: false,
+      suspectedStroke: false,
+      majorBurn: false,
+      seizure: false,
+      pregnancyEmergency: false,
+      painScore: "",
+      respiratoryRate: "",
+      oxygenSaturation: "",
+      systolicBp: "",
+      heartRate: "",
+      capillaryRefillSeconds: "",
+      eyeOpening: "",
+      verbalResponse: "",
+      motorResponse: "",
+      note: "",
+    });
+  };
+
   const handleSubmitTriage = async () => {
     if (!canEdit) return;
 
@@ -336,25 +447,46 @@ export default function PatientDetailsScreen() {
         notBreathingNormally: triageForm.notBreathingNormally,
         severeBleeding: triageForm.severeBleeding,
         multipleVictimsContext: triageForm.multipleVictimsContext,
+        airwayCompromised: triageForm.airwayCompromised,
+        cannotWalk: triageForm.cannotWalk,
+        chestPain: triageForm.chestPain,
+        suspectedStroke: triageForm.suspectedStroke,
+        majorBurn: triageForm.majorBurn,
+        seizure: triageForm.seizure,
+        pregnancyEmergency: triageForm.pregnancyEmergency,
         painScore: triageForm.painScore === "" ? null : Number(triageForm.painScore),
+        respiratoryRate:
+          triageForm.respiratoryRate === ""
+            ? null
+            : Number(triageForm.respiratoryRate),
+        oxygenSaturation:
+          triageForm.oxygenSaturation === ""
+            ? null
+            : Number(triageForm.oxygenSaturation),
+        systolicBp:
+          triageForm.systolicBp === "" ? null : Number(triageForm.systolicBp),
+        heartRate:
+          triageForm.heartRate === "" ? null : Number(triageForm.heartRate),
+        capillaryRefillSeconds:
+          triageForm.capillaryRefillSeconds === ""
+            ? null
+            : Number(triageForm.capillaryRefillSeconds),
+        eyeOpening:
+          triageForm.eyeOpening === "" ? null : Number(triageForm.eyeOpening),
+        verbalResponse:
+          triageForm.verbalResponse === "" ? null : Number(triageForm.verbalResponse),
+        motorResponse:
+          triageForm.motorResponse === "" ? null : Number(triageForm.motorResponse),
         note: triageForm.note.trim(),
       });
 
       showToast({
         title: "Triage Saved",
-        message: "Patient triage saved successfully.",
+        message: "Rule-based triage assessment saved successfully.",
         type: "success",
       });
 
-      setTriageForm({
-        unconscious: false,
-        notBreathingNormally: false,
-        severeBleeding: false,
-        multipleVictimsContext: false,
-        painScore: "",
-        note: "",
-      });
-
+      resetTriageForm();
       await loadPatient(true);
     } catch (error) {
       showToast({
@@ -371,19 +503,27 @@ export default function PatientDetailsScreen() {
     const base = resourceForm.requestReason.trim();
 
     if (selectedCategoryName === "BLOOD") {
-      return `${base}\nBlood Type: ${resourceForm.bloodType || "Not specified"}\nPints Requested: ${resourceForm.requestedQuantity || "Not specified"}`;
+      return `${base}\nBlood Type: ${
+        resourceForm.bloodType || "Not specified"
+      }\nPints Requested: ${resourceForm.requestedQuantity || "Not specified"}`;
     }
 
     if (selectedCategoryName === "IMAGING") {
-      return `${base}\nImaging Type: ${resourceForm.imagingType || "Not specified"}`;
+      return `${base}\nImaging Type: ${
+        resourceForm.imagingType || "Not specified"
+      }`;
     }
 
     if (selectedCategoryName === "THEATRE") {
-      return `${base}\nTheatre Need: ${resourceForm.theatreNeed || "Not specified"}`;
+      return `${base}\nTheatre Need: ${
+        resourceForm.theatreNeed || "Not specified"
+      }`;
     }
 
     if (selectedCategoryName === "BED") {
-      return `${base}\nBed Type/Ward: ${resourceForm.bedType || "Not specified"}`;
+      return `${base}\nBed Type/Ward: ${
+        resourceForm.bedType || "Not specified"
+      }`;
     }
 
     return base;
@@ -478,9 +618,15 @@ export default function PatientDetailsScreen() {
     return (
       <>
         <ScrollView
-          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
         >
-          <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
+          <BackNavButton
+            label="Back to Triage Queue"
+            fallbackRoute="/staff/triage-nurse"
+          />
           <PageHeader
             eyebrow="Patient Coordination"
             title="Patient Details"
@@ -497,9 +643,15 @@ export default function PatientDetailsScreen() {
     return (
       <>
         <ScrollView
-          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
         >
-          <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
+          <BackNavButton
+            label="Back to Triage Queue"
+            fallbackRoute="/staff/triage-nurse"
+          />
           <PageHeader
             eyebrow="Patient Coordination"
             title="Patient Details"
@@ -522,12 +674,21 @@ export default function PatientDetailsScreen() {
   return (
     <>
       <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background },
+        ]}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={() => loadPatient(true)} />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadPatient(true)}
+          />
         }
       >
-        <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
+        <BackNavButton
+          label="Back to Triage Queue"
+          fallbackRoute="/staff/triage-nurse"
+        />
 
         <PageHeader
           eyebrow="Patient Coordination"
@@ -582,8 +743,14 @@ export default function PatientDetailsScreen() {
             ) : null}
 
             {!canEdit ? (
-              <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
-                This patient is assigned to another triage nurse. You can view details but cannot edit.
+              <Text
+                style={[
+                  typography.body,
+                  { color: colors.textMuted, marginTop: 8 },
+                ]}
+              >
+                This patient is assigned to another triage nurse. You can view
+                details but cannot edit.
               </Text>
             ) : null}
           </View>
@@ -605,9 +772,12 @@ export default function PatientDetailsScreen() {
             <Text style={[typography.body, { color: colors.text }]}>
               Patient Code: {patient.patientCode}
             </Text>
-            <Text style={[typography.body, { color: colors.text }]}>
-              Status: {patient.status}
-            </Text>
+
+            <StatusBadge
+              label={patient.status}
+              type={getPatientStatusType(patient.status)}
+            />
+
             <Text style={[typography.body, { color: colors.text }]}>
               Name: {patient.fullName || "Unknown"}
             </Text>
@@ -632,6 +802,40 @@ export default function PatientDetailsScreen() {
               )}
             </View>
           </View>
+        </FormSection>
+
+        <FormSection title="Patient Outcome">
+          <View style={styles.actionGrid}>
+            <AppButton
+              title="Mark Under Treatment"
+              onPress={() => handleOutcome("UNDER_TREATMENT")}
+              disabled={isUpdatingOutcome || !canEdit}
+            />
+            <AppButton
+              title="Mark Discharged"
+              onPress={() => handleOutcome("DISCHARGED")}
+              disabled={isUpdatingOutcome || !canEdit}
+              variant="secondary"
+            />
+            <AppButton
+              title="Mark Deceased"
+              onPress={() => handleOutcome("DECEASED")}
+              disabled={isUpdatingOutcome || !canEdit}
+              variant="secondary"
+            />
+            <AppButton
+              title="Mark Invalid"
+              onPress={() => handleOutcome("INVALID")}
+              disabled={isUpdatingOutcome || !canEdit}
+              variant="secondary"
+            />
+          </View>
+
+          <Text style={[typography.body, { color: colors.textMuted }]}>
+            Discharged, deceased, and invalid outcomes automatically release
+            reusable resources such as beds, theatre, and imaging allocations.
+            Blood allocations are not automatically restored.
+          </Text>
         </FormSection>
 
         <FormSection title="Patient Identity">
@@ -674,7 +878,11 @@ export default function PatientDetailsScreen() {
           />
 
           <AppButton
-            title={isExcludingPatient ? "Removing..." : "Remove Invalid Patient Placeholder"}
+            title={
+              isExcludingPatient
+                ? "Removing..."
+                : "Remove Invalid Patient Placeholder"
+            }
             onPress={handleExcludePatient}
             loading={isExcludingPatient}
             disabled={isExcludingPatient || !canEdit}
@@ -682,11 +890,18 @@ export default function PatientDetailsScreen() {
           />
         </FormSection>
 
-        <FormSection title="Run Triage">
+        <FormSection title="Rule-Based Triage">
           {[
+            ["airwayCompromised", "Airway Compromised"],
             ["unconscious", "Unconscious"],
             ["notBreathingNormally", "Not Breathing Normally"],
             ["severeBleeding", "Severe Bleeding"],
+            ["cannotWalk", "Cannot Walk"],
+            ["chestPain", "Chest Pain"],
+            ["suspectedStroke", "Suspected Stroke"],
+            ["majorBurn", "Major Burn"],
+            ["seizure", "Seizure"],
+            ["pregnancyEmergency", "Pregnancy Emergency"],
             ["multipleVictimsContext", "Multiple Casualty Context"],
           ].map(([key, label]) => (
             <Pressable
@@ -697,12 +912,105 @@ export default function PatientDetailsScreen() {
               ]}
               onPress={() => handleToggleBoolean(key)}
             >
-              <Text style={[typography.body, { color: colors.text }]}>{label}</Text>
+              <Text style={[typography.body, { color: colors.text }]}>
+                {label}
+              </Text>
               <Text style={[typography.body, { color: colors.text }]}>
                 {triageForm[key] ? "Yes" : "No"}
               </Text>
             </Pressable>
           ))}
+
+          <FormInput
+            label="Respiratory Rate"
+            value={triageForm.respiratoryRate}
+            onChangeText={(value) =>
+              setTriageForm((prev) => ({ ...prev, respiratoryRate: value }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 28"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Oxygen Saturation (%)"
+            value={triageForm.oxygenSaturation}
+            onChangeText={(value) =>
+              setTriageForm((prev) => ({ ...prev, oxygenSaturation: value }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 92"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Systolic Blood Pressure"
+            value={triageForm.systolicBp}
+            onChangeText={(value) =>
+              setTriageForm((prev) => ({ ...prev, systolicBp: value }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 90"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Heart Rate"
+            value={triageForm.heartRate}
+            onChangeText={(value) =>
+              setTriageForm((prev) => ({ ...prev, heartRate: value }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 120"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Capillary Refill Seconds"
+            value={triageForm.capillaryRefillSeconds}
+            onChangeText={(value) =>
+              setTriageForm((prev) => ({
+                ...prev,
+                capillaryRefillSeconds: value,
+              }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 4"
+            editable={canEdit}
+          />
+
+          <FormSelect
+            label="GCS Eye Opening"
+            selectedValue={triageForm.eyeOpening}
+            onValueChange={(value) =>
+              setTriageForm((prev) => ({ ...prev, eyeOpening: value }))
+            }
+            options={GCS_EYE_OPTIONS}
+            placeholder="Select eye response"
+            enabled={canEdit}
+          />
+
+          <FormSelect
+            label="GCS Verbal Response"
+            selectedValue={triageForm.verbalResponse}
+            onValueChange={(value) =>
+              setTriageForm((prev) => ({ ...prev, verbalResponse: value }))
+            }
+            options={GCS_VERBAL_OPTIONS}
+            placeholder="Select verbal response"
+            enabled={canEdit}
+          />
+
+          <FormSelect
+            label="GCS Motor Response"
+            selectedValue={triageForm.motorResponse}
+            onValueChange={(value) =>
+              setTriageForm((prev) => ({ ...prev, motorResponse: value }))
+            }
+            options={GCS_MOTOR_OPTIONS}
+            placeholder="Select motor response"
+            enabled={canEdit}
+          />
 
           <FormInput
             label="Pain Score (0-10)"
@@ -732,6 +1040,33 @@ export default function PatientDetailsScreen() {
             loading={isSubmittingTriage}
             disabled={isSubmittingTriage || !canEdit}
           />
+
+          {latestTriage ? (
+            <View
+              style={[
+                styles.summaryCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  padding: spacing.md,
+                },
+                shadow,
+              ]}
+            >
+              <Text style={[typography.body, { color: colors.text }]}>
+                Latest Score: {latestTriage.triageScore}
+              </Text>
+              <Text style={[typography.body, { color: colors.text }]}>
+                Advisory: {latestTriage.advisory}
+              </Text>
+              {latestTriage.reasons?.length ? (
+                <Text style={[typography.body, { color: colors.textMuted }]}>
+                  Reasons: {latestTriage.reasons.join("; ")}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </FormSection>
 
         <FormSection title="Create Resource Request">
@@ -782,7 +1117,10 @@ export default function PatientDetailsScreen() {
                 label="Pints Required"
                 value={resourceForm.requestedQuantity}
                 onChangeText={(value) =>
-                  setResourceForm((prev) => ({ ...prev, requestedQuantity: value }))
+                  setResourceForm((prev) => ({
+                    ...prev,
+                    requestedQuantity: value,
+                  }))
                 }
                 keyboardType="numeric"
                 placeholder="e.g. 2"
@@ -807,7 +1145,10 @@ export default function PatientDetailsScreen() {
                 label="Beds Required"
                 value={resourceForm.requestedQuantity}
                 onChangeText={(value) =>
-                  setResourceForm((prev) => ({ ...prev, requestedQuantity: value }))
+                  setResourceForm((prev) => ({
+                    ...prev,
+                    requestedQuantity: value,
+                  }))
                 }
                 keyboardType="numeric"
                 placeholder="e.g. 1"
@@ -852,7 +1193,9 @@ export default function PatientDetailsScreen() {
           />
 
           <AppButton
-            title={isSubmittingResource ? "Creating Request..." : "Create Resource Request"}
+            title={
+              isSubmittingResource ? "Creating Request..." : "Create Resource Request"
+            }
             onPress={handleSubmitResourceRequest}
             loading={isSubmittingResource}
             disabled={isSubmittingResource || !canEdit}
@@ -910,6 +1253,24 @@ export default function PatientDetailsScreen() {
                   {request.unitOfMeasureSnapshot || ""}
                 </Text>
 
+                {request.allocations?.length ? (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={[typography.label, { color: colors.text }]}>
+                      Allocations
+                    </Text>
+                    {request.allocations.map((allocation) => (
+                      <Text
+                        key={allocation.id}
+                        style={[typography.body, { color: colors.textMuted }]}
+                      >
+                        {allocation.resourceItem?.label} •{" "}
+                        {allocation.reservedQuantity ?? 1} •{" "}
+                        {allocation.allocationStatus}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+
                 <ThreadPanel
                   title="Resource Request Thread"
                   loadKey={request.id}
@@ -922,6 +1283,44 @@ export default function PatientDetailsScreen() {
               title="No Resource Requests"
               message="No resources have been requested for this patient yet."
               icon="layers-outline"
+            />
+          )}
+        </FormSection>
+
+        <FormSection title="Patient Timeline History">
+          {patient.timelineEvents?.length ? (
+            patient.timelineEvents.map((event) => (
+              <View
+                key={event.id}
+                style={[
+                  styles.timelineCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderLeftColor: colors.primary,
+                    borderRadius: radius.lg,
+                    padding: spacing.md,
+                  },
+                ]}
+              >
+                <Text style={[typography.label, { color: colors.text }]}>
+                  {event.eventLabel}
+                </Text>
+                <Text style={[typography.body, { color: colors.textMuted }]}>
+                  {event.eventStatus || "UPDATE"} •{" "}
+                  {new Date(event.createdAt).toLocaleString()}
+                </Text>
+                {event.note ? (
+                  <Text style={[typography.body, { color: colors.text }]}>
+                    {event.note}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <EmptyStateCard
+              title="No Timeline Events"
+              message="No patient history has been recorded yet."
+              icon="time-outline"
             />
           )}
         </FormSection>
@@ -962,5 +1361,12 @@ const styles = StyleSheet.create({
   requestCard: {
     borderWidth: 1,
     marginBottom: 10,
+  },
+  timelineCard: {
+    borderLeftWidth: 4,
+    marginBottom: 10,
+  },
+  actionGrid: {
+    gap: 10,
   },
 });

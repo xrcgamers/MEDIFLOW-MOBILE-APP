@@ -1,5 +1,15 @@
 import apiClient from "../api/client";
 
+export async function getIncidentsService(params = {}) {
+  const response = await apiClient.get("/staff/incidents", { params });
+  return response.data.data;
+}
+
+export async function getIncidentByIdService(incidentId) {
+  const response = await apiClient.get(`/staff/incidents/${incidentId}`);
+  return response.data.data;
+}
+
 export async function getPatientByIdService(patientId) {
   const response = await apiClient.get(`/staff/patients/${patientId}`);
   return response.data.data;
@@ -7,6 +17,14 @@ export async function getPatientByIdService(patientId) {
 
 export async function updatePatientService(patientId, payload) {
   const response = await apiClient.patch(`/staff/patients/${patientId}`, payload);
+  return response.data.data;
+}
+
+export async function updatePatientOutcomeService(patientId, payload) {
+  const response = await apiClient.patch(
+    `/staff/patients/${patientId}/outcome`,
+    payload
+  );
   return response.data.data;
 }
 
