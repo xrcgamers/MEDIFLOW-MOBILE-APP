@@ -58,7 +58,9 @@ model Incident {
   patientTriages        PatientTriage[]
   patientCareUpdates    PatientCareUpdate[]
   patientTimelineEvents PatientTimelineEvent[]
-
+  assignedEmergencyNurseId String?
+  assignedEmergencyNurse   StaffUser? @relation("IncidentEmergencyAssignment", fields: [assignedEmergencyNurseId], references: [id])
+  
   @@index([trackingCode])
   @@index([status])
   @@index([createdAt])
@@ -115,7 +117,9 @@ model Patient {
   systemAlerts         SystemAlert[]
   communicationThreads CommunicationThread[]
   resourceStatusEvents ResourceStatusEvent[]
-
+  assignedTriageNurseId String?
+  assignedTriageNurse   StaffUser? @relation("PatientTriageAssignment", fields: [assignedTriageNurseId], references: [id])
+  
   @@index([incidentId])
   @@index([patientCode])
   @@index([status])
@@ -373,6 +377,8 @@ model StaffUser {
   queueOverrides          IncidentQueuePriority[]    @relation("StaffUserQueueOverrides")
   threadParticipants      CommunicationParticipant[]
   sentMessages            CommunicationMessage[]     @relation("SentCommunicationMessages")
+  assignedEmergencyIncidents Incident[] @relation("IncidentEmergencyAssignment")
+  assignedTriagePatients     Patient[]  @relation("PatientTriageAssignment")
 
   @@index([roleId])
   @@index([isActive])

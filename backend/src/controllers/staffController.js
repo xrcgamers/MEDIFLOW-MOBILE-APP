@@ -406,6 +406,7 @@ async function getPatientById(req, res) {
     const patient = await prisma.patient.findUnique({
       where: { id: patientId },
       include: {
+        assignedTriageNurse: true,
         incident: true,
         triages: {
           orderBy: {
@@ -449,6 +450,91 @@ async function getPatientById(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch patient",
+      error: error.message,
+    });
+  }
+}
+
+async function updatePatient(req, res) {
+  try {
+    const { patientId } = req.params;
+
+    const {
+      fullName = null,
+      sex = null,
+      estimatedAge = null,
+    } = req.body;
+
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    });
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    const parsedAge =
+      estimatedAge === null || estimatedAge === undefined || estimatedAge === ""
+        ? null
+        : Number(estimatedAge);
+
+    const updated = await prisma.patient.update({
+      where: { id: patientId },
+      data: {
+        fullName: fullName ? String(fullName).trim() : null,
+        sex: sex ? String(sex).trim() : null,
+        estimatedAge:
+          parsedAge !== null && Number.isFinite(parsedAge) ? parsedAge : null,
+        isPlaceholder: false,
+      },
+    });
+
+    await prisma.patientTimelineEvent.create({
+      data: {
+        patientId: updated.id,
+        incidentId: updated.incidentId,
+        eventLabel: "Patient Identity Updated",
+        eventStatus: "UPDATED",
+        note: `Patient identity updated to ${
+          updated.fullName || updated.patientCode
+        }.`,
+      },
+    });
+
+    await createAuditLog({
+      actionType: "PATIENT_UPDATED",
+      actorUserId: req.user?.id || null,
+      actorRole: req.user?.role || null,
+      incidentId: updated.incidentId,
+      patientId: updated.id,
+      targetTable: "Patient",
+      targetId: updated.id,
+      oldValue: {
+        fullName: patient.fullName,
+        sex: patient.sex,
+        estimatedAge: patient.estimatedAge,
+        isPlaceholder: patient.isPlaceholder,
+      },
+      newValue: {
+        fullName: updated.fullName,
+        sex: updated.sex,
+        estimatedAge: updated.estimatedAge,
+        isPlaceholder: updated.isPlaceholder,
+      },
+      reason: "Patient identity updated by triage nurse.",
+    });
+
+    return res.json({
+      success: true,
+      data: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update patient",
       error: error.message,
     });
   }
@@ -714,6 +800,7 @@ module.exports = {
   addPatientToIncident,
   excludePatientFromIncident,
   getPatientById,
+  updatePatient,
   reorderIncidentQueue,
   addCareUpdateToPatient,
   getIncidentThread,
@@ -721,3 +808,4 @@ module.exports = {
   getResourceRequestThread,
   postThreadMessage,
 };
+

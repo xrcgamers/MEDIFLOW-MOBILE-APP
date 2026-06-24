@@ -6,17 +6,22 @@ export async function getResourceCategoriesService() {
 }
 
 export async function getResourceItemsService(params = {}) {
-  const response = await apiClient.get("/resources/items", { params });
+  const response = await apiClient.get("/resources", { params });
   return response.data.data;
 }
 
 export async function createResourceItemService(payload) {
-  const response = await apiClient.post("/resources/items", payload);
+  const response = await apiClient.post("/resources", payload);
   return response.data.data;
 }
 
 export async function updateResourceItemService(resourceItemId, payload) {
-  const response = await apiClient.patch(`/resources/items/${resourceItemId}`, payload);
+  const response = await apiClient.patch(`/resources/${resourceItemId}`, payload);
+  return response.data.data;
+}
+
+export async function deleteResourceItemService(resourceItemId) {
+  const response = await apiClient.delete(`/resources/${resourceItemId}`);
   return response.data.data;
 }
 
@@ -31,11 +36,17 @@ export async function updateResourceRequestService(requestId, payload) {
 }
 
 export async function allocateResourceToRequestService(requestId, payload) {
-  const response = await apiClient.post(`/resources/requests/${requestId}/allocate`, payload);
+  const response = await apiClient.post(
+    `/resources/requests/${requestId}/allocate`,
+    payload
+  );
   return response.data.data;
 }
 
-export async function releaseResourceAllocationService(allocationId, payload = {}) {
-  const response = await apiClient.post(`/resources/allocations/${allocationId}/release`, payload);
+export async function releaseResourceAllocationService(allocationId, payload) {
+  const response = await apiClient.post(
+    `/resources/allocations/${allocationId}/release`,
+    payload
+  );
   return response.data.data;
 }

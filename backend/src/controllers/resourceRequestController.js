@@ -29,6 +29,29 @@ function normalizeQuantity(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function deriveInventoryStatus(item, availableQuantity) {
+  if (item.status === "INACTIVE") return "INACTIVE";
+
+  if (availableQuantity === null || availableQuantity === undefined) {
+    return item.status || "AVAILABLE";
+  }
+
+  const available = Number(availableQuantity);
+  const current = Number(item.currentQuantity || 0);
+
+  if (available <= 0) return "RESERVED";
+  if (available <= 2) return "CRITICAL";
+
+  if (current > 0) {
+    const ratio = available / current;
+    if (ratio <= 0.25) return "LOW";
+  }
+
+  if (available <= 5) return "LOW";
+
+  return "AVAILABLE";
+}
+
 async function getResourceRequests(req, res) {
   try {
     const {
@@ -84,12 +107,12 @@ async function getResourceRequests(req, res) {
 async function createPatientResourceRequest(req, res) {
   try {
     const { patientId } = req.params;
+
     const {
       resourceCategoryId,
       priority = null,
       requestReason,
       requestedQuantity = null,
-      approvedQuantity = null,
       unitOfMeasureSnapshot = null,
     } = req.body;
 
@@ -141,7 +164,7 @@ async function createPatientResourceRequest(req, res) {
         requestReason,
         requestStatus: "REQUESTED",
         requestedQuantity: normalizeQuantity(requestedQuantity),
-        approvedQuantity: normalizeQuantity(approvedQuantity),
+        approvedQuantity: null,
         fulfilledQuantity: 0,
         unitOfMeasureSnapshot,
       },
@@ -185,7 +208,7 @@ async function createPatientResourceRequest(req, res) {
         assignedSectionRole,
         priority,
         requestedQuantity: request.requestedQuantity,
-        approvedQuantity: request.approvedQuantity,
+        approvedQuantity: null,
         fulfilledQuantity: request.fulfilledQuantity,
       },
       reason: requestReason,
@@ -385,6 +408,13 @@ async function allocateResourceToRequest(req, res) {
       });
     }
 
+    if (item.status === "INACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Selected resource item is inactive",
+      });
+    }
+
     if (
       item.availableQuantity !== null &&
       item.availableQuantity !== undefined &&
@@ -414,14 +444,23 @@ async function allocateResourceToRequest(req, res) {
           ? null
           : item.availableQuantity - qty;
 
+      const nextStatus =
+        nextAvailableQuantity === null
+          ? item.status
+          : deriveInventoryStatus(item, nextAvailableQuantity);
+
       await tx.resourceItem.update({
         where: { id: item.id },
         data: {
           availableQuantity: nextAvailableQuantity,
-          status:
-            nextAvailableQuantity !== null && nextAvailableQuantity <= 0
-              ? "RESERVED"
-              : item.status,
+          status: nextStatus,
+          statusEvents: {
+            create: {
+              eventType: "ALLOCATED",
+              note: `${qty} ${item.unitOfMeasure || ""} allocated to request.`,
+              actorUserId: req.user?.id || null,
+            },
+          },
         },
       });
 
@@ -457,7 +496,9 @@ async function allocateResourceToRequest(req, res) {
           incidentId: request.incidentId,
           eventLabel: "Resource Allocated",
           eventStatus: updatedRequest.requestStatus,
-          note: `${request.resourceCategory.name} allocated from selected inventory entry.`,
+          note: `${request.resourceCategory.name} allocated from ${
+            item.subType || item.label
+          }.`,
         },
       });
 
@@ -524,13 +565,27 @@ async function releaseResourceAllocation(req, res) {
         allocation.resourceItem.availableQuantity !== null &&
         allocation.resourceItem.availableQuantity !== undefined
       ) {
+        const restoredQty =
+          allocation.resourceItem.availableQuantity +
+          Number(allocation.reservedQuantity || 1);
+
+        const nextStatus = deriveInventoryStatus(
+          allocation.resourceItem,
+          restoredQty
+        );
+
         await tx.resourceItem.update({
           where: { id: allocation.resourceItemId },
           data: {
-            availableQuantity:
-              allocation.resourceItem.availableQuantity +
-              Number(allocation.reservedQuantity || 1),
-            status: "AVAILABLE",
+            availableQuantity: restoredQty,
+            status: nextStatus,
+            statusEvents: {
+              create: {
+                eventType: "RELEASED",
+                note: releaseReason || "Allocation released and stock restored.",
+                actorUserId: req.user?.id || null,
+              },
+            },
           },
         });
       }

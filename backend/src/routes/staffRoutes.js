@@ -8,6 +8,7 @@ const {
   addPatientToIncident,
   excludePatientFromIncident,
   getPatientById,
+  updatePatient,
   reorderIncidentQueue,
   addCareUpdateToPatient,
   getIncidentThread,
@@ -17,6 +18,7 @@ const {
 } = require("../controllers/staffController");
 
 const { createPatientTriage } = require("../controllers/triageController");
+
 const {
   createPatientResourceRequest,
 } = require("../controllers/resourceRequestController");
@@ -84,13 +86,19 @@ router.post(
 
 /**
  * PATIENT WORKSPACE
- * Triage Nurse works at patient level.
  */
 router.get(
   "/patients/:patientId",
   requireAuth,
   authorizeRoles("ADMIN", "TRIAGE_NURSE", "EMERGENCY_NURSE"),
   mustBeFn("getPatientById", getPatientById)
+);
+
+router.patch(
+  "/patients/:patientId",
+  requireAuth,
+  authorizeRoles("ADMIN", "TRIAGE_NURSE"),
+  mustBeFn("updatePatient", updatePatient)
 );
 
 router.post(

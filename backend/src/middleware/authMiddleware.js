@@ -15,14 +15,21 @@ function requireAuth(req, res, next) {
     const decoded = verifyAccessToken(token);
 
     req.user = {
-      id: decoded.sub,
+      id: decoded.sub || decoded.id || decoded.userId,
       email: decoded.email,
       staffId: decoded.staffId,
       role: decoded.role,
       name: decoded.name,
     };
 
-    next();
+    if (!req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token payload. User ID missing.",
+      });
+    }
+
+    return next();
   } catch (error) {
     return res.status(401).json({
       success: false,

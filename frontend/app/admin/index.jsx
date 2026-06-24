@@ -18,47 +18,17 @@ import { useAppTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { getAdminDashboardSummaryService } from "../../src/services/adminDashboardService";
 
+const AUTO_REFRESH_MS = 8000;
+
 const QUICK_LINKS = [
-  {
-    label: "Emergency Review",
-    route: "/staff/emergency-nurse",
-    icon: "shield-checkmark-outline",
-  },
-  {
-    label: "Triage Queue",
-    route: "/staff/triage-nurse",
-    icon: "pulse-outline",
-  },
-  {
-    label: "Incident Queue",
-    route: "/staff/incidents",
-    icon: "list-outline",
-  },
-  {
-    label: "Inventory",
-    route: "/admin/resource-inventory",
-    icon: "cube-outline",
-  },
-  {
-    label: "Staff Users",
-    route: "/admin/staff-users",
-    icon: "people-outline",
-  },
-  {
-    label: "System Alerts",
-    route: "/admin/system-alerts",
-    icon: "alert-circle-outline",
-  },
-  {
-    label: "Demo Health",
-    route: "/admin/demo-health",
-    icon: "speedometer-outline",
-  },
-  {
-    label: "System Checklist",
-    route: "/admin/system-checklist",
-    icon: "checkmark-done-outline",
-  },
+  { label: "Emergency Review", route: "/staff/emergency-nurse", icon: "shield-checkmark-outline" },
+  { label: "Triage Queue", route: "/staff/triage-nurse", icon: "pulse-outline" },
+  { label: "Incident Queue", route: "/staff/incidents", icon: "list-outline" },
+  { label: "Inventory", route: "/admin/resource-inventory", icon: "cube-outline" },
+  { label: "Staff Users", route: "/admin/staff-users", icon: "people-outline" },
+  { label: "System Alerts", route: "/admin/system-alerts", icon: "alert-circle-outline" },
+  { label: "Demo Health", route: "/admin/demo-health", icon: "speedometer-outline" },
+  { label: "System Checklist", route: "/admin/system-checklist", icon: "checkmark-done-outline" },
 ];
 
 export default function AdminDashboardScreen() {
@@ -79,18 +49,21 @@ export default function AdminDashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadSummary = async (refresh = false) => {
+  const loadSummary = async (refresh = false, silent = false) => {
     try {
-      refresh ? setIsRefreshing(true) : setIsLoading(true);
+      if (refresh) setIsRefreshing(true);
+      else if (!silent) setIsLoading(true);
 
       const data = await getAdminDashboardSummaryService();
       setSummary(data || {});
     } catch (error) {
-      showToast({
-        title: "Dashboard Load Failed",
-        message: error.message || "Unable to load admin dashboard.",
-        type: "error",
-      });
+      if (!silent) {
+        showToast({
+          title: "Dashboard Load Failed",
+          message: error.message || "Unable to load admin dashboard.",
+          type: "error",
+        });
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -99,6 +72,14 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => {
     loadSummary();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadSummary(false, true);
+    }, AUTO_REFRESH_MS);
+
+    return () => clearInterval(timer);
   }, []);
 
   const handleLogout = async () => {
@@ -144,15 +125,21 @@ export default function AdminDashboardScreen() {
             Loading dashboard summary...
           </Text>
         ) : (
-          <View style={styles.summaryWrap}>
-            <SummaryCard label="Open Incidents" value={summary.openIncidents} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Accepted Incidents" value={summary.acceptedIncidents} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Patients" value={summary.patients} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Untriaged Patients" value={summary.untriagedPatients} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Pending Requests" value={summary.pendingResourceRequests} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Open Alerts" value={summary.openAlerts} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <SummaryCard label="Low/Critical Stock" value={summary.lowStockResources} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-          </View>
+          <>
+            <View style={styles.summaryWrap}>
+              <SummaryCard label="Open Incidents" value={summary.openIncidents} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Accepted Incidents" value={summary.acceptedIncidents} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Patients" value={summary.patients} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Untriaged Patients" value={summary.untriagedPatients} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Pending Requests" value={summary.pendingResourceRequests} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Open Alerts" value={summary.openAlerts} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+              <SummaryCard label="Low/Critical Stock" value={summary.lowStockResources} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+            </View>
+
+            <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+              Dashboard auto-refreshes every {AUTO_REFRESH_MS / 1000} seconds.
+            </Text>
+          </>
         )}
       </FormSection>
 
@@ -210,29 +197,11 @@ function SummaryCard({ label, value, colors, typography, radius, spacing, shadow
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    flexGrow: 1,
-  },
-  summaryWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  summaryCard: {
-    borderWidth: 1,
-    minWidth: 150,
-  },
-  summaryValue: {
-    fontSize: 24,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  linkWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
+  container: { padding: 24, flexGrow: 1 },
+  summaryWrap: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  summaryCard: { borderWidth: 1, minWidth: 150 },
+  summaryValue: { fontSize: 24, fontWeight: "800", marginTop: 6 },
+  linkWrap: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   linkCard: {
     borderWidth: 1,
     minWidth: 160,

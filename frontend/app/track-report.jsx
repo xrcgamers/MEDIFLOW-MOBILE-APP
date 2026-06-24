@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ScrollView, Text, StyleSheet, View, Image } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import BackNavButton from "../src/components/BackNavButton";
 import PageHeader from "../src/components/PageHeader";
 import FormSection from "../src/components/FormSection";
@@ -31,11 +32,30 @@ function getStatusType(status) {
   }
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return {
+      date: "N/A",
+      time: "N/A",
+    };
+  }
+
+  const date = new Date(value);
+
+  return {
+    date: date.toLocaleDateString(),
+    time: date.toLocaleTimeString(),
+  };
+}
+
 export default function TrackReportScreen() {
+  const params = useLocalSearchParams();
   const { colors, typography, radius, spacing, shadow } = useAppTheme();
   const { showToast } = useToast();
 
-  const [trackingCode, setTrackingCode] = useState("");
+  const [trackingCode, setTrackingCode] = useState(
+    params?.trackingCode ? String(params.trackingCode) : ""
+  );
   const [phoneNumber, setPhoneNumber] = useState("");
   const [incident, setIncident] = useState(null);
   const [followUpNote, setFollowUpNote] = useState("");
@@ -190,18 +210,13 @@ export default function TrackReportScreen() {
               </Text>
 
               <Text style={[typography.body, { color: colors.text }]}>
-                Coordinates: {incident.latitude ?? "N/A"}, {incident.longitude ?? "N/A"}
+                Coordinates: {incident.latitude ?? "N/A"},{" "}
+                {incident.longitude ?? "N/A"}
               </Text>
 
               <Text style={[typography.body, { color: colors.text }]}>
                 Estimated Patients: {incident.estimatedVictimCount}
               </Text>
-
-              {incident.publicStatusNote ? (
-                <Text style={[typography.body, { color: colors.textMuted }]}>
-                  Public Note: {incident.publicStatusNote}
-                </Text>
-              ) : null}
 
               {incident.mediaAttachments?.length ? (
                 <View style={{ marginTop: 12 }}>
@@ -239,32 +254,40 @@ export default function TrackReportScreen() {
 
           <FormSection title="Status History">
             {incident.statusHistory?.length ? (
-              incident.statusHistory.map((item) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.timelineItem,
-                    {
-                      backgroundColor: colors.surface,
-                      borderLeftColor: colors.primary,
-                    },
-                  ]}
-                >
-                  <Text style={[typography.label, { color: colors.text }]}>
-                    {item.status}
-                  </Text>
+              incident.statusHistory.map((item) => {
+                const stamped = formatDateTime(item.createdAt);
 
-                  <Text style={[typography.body, { color: colors.textMuted }]}>
-                    {new Date(item.createdAt).toLocaleString()}
-                  </Text>
-
-                  {item.note ? (
-                    <Text style={[typography.body, { color: colors.text }]}>
-                      {item.note}
+                return (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.timelineItem,
+                      {
+                        backgroundColor: colors.surface,
+                        borderLeftColor: colors.primary,
+                      },
+                    ]}
+                  >
+                    <Text style={[typography.label, { color: colors.text }]}>
+                      {item.status}
                     </Text>
-                  ) : null}
-                </View>
-              ))
+
+                    <Text style={[typography.body, { color: colors.textMuted }]}>
+                      Date: {stamped.date}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.textMuted }]}>
+                      Time: {stamped.time}
+                    </Text>
+
+                    {item.note ? (
+                      <Text style={[typography.body, { color: colors.text }]}>
+                        {item.note}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })
             ) : (
               <EmptyStateCard
                 title="No History Yet"

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, StyleSheet, View, Image } from "react-native";
+import { router } from "expo-router";
 import BackNavButton from "../src/components/BackNavButton";
 import PageHeader from "../src/components/PageHeader";
 import FormSection from "../src/components/FormSection";
 import FormInput from "../src/components/FormInput";
 import FormSelect from "../src/components/FormSelect";
 import AppButton from "../src/components/AppButton";
+import StatusBadge from "../src/components/StatusBadge";
 import { useAppTheme } from "../src/context/ThemeContext";
 import { useToast } from "../src/context/ToastContext";
 import { createEmergencyReportService } from "../src/services/reportService";
@@ -61,24 +63,26 @@ const INCIDENT_SUBTYPE_MAP = {
   OTHER: [],
 };
 
+const initialForm = {
+  incidentType: "",
+  subIncidentType: "",
+  otherIncidentType: "",
+  autoLocationText: "",
+  manualLocationText: "",
+  latitude: "",
+  longitude: "",
+  estimatedVictimCount: "1",
+  phoneNumber: "",
+  notes: "",
+};
+
 export default function ReportEmergencyScreen() {
   const { colors, typography, radius, spacing, shadow } = useAppTheme();
   const { showToast } = useToast();
 
-  const [form, setForm] = useState({
-    incidentType: "",
-    subIncidentType: "",
-    otherIncidentType: "",
-    autoLocationText: "",
-    manualLocationText: "",
-    latitude: "",
-    longitude: "",
-    estimatedVictimCount: "1",
-    phoneNumber: "",
-    notes: "",
-  });
-
+  const [form, setForm] = useState(initialForm);
   const [photo, setPhoto] = useState(null);
+  const [submittedIncident, setSubmittedIncident] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingCoordinates, setIsGettingCoordinates] = useState(false);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
@@ -86,16 +90,13 @@ export default function ReportEmergencyScreen() {
 
   const subtypeOptions = useMemo(() => {
     const items = INCIDENT_SUBTYPE_MAP[form.incidentType] || [];
-    return items.map((item) => ({
-      label: item,
-      value: item,
-    }));
+    return items.map((item) => ({ label: item, value: item }));
   }, [form.incidentType]);
 
   useEffect(() => {
     let isMounted = true;
 
-    const captureCoordinates = async () => {
+    async function captureCoordinates() {
       try {
         setIsGettingCoordinates(true);
         setHasTriedCoordinates(false);
@@ -121,11 +122,9 @@ export default function ReportEmergencyScreen() {
           type: "warning",
         });
       } finally {
-        if (isMounted) {
-          setIsGettingCoordinates(false);
-        }
+        if (isMounted) setIsGettingCoordinates(false);
       }
-    };
+    }
 
     captureCoordinates();
 
@@ -139,7 +138,6 @@ export default function ReportEmergencyScreen() {
       setIsTakingPhoto(true);
 
       const captured = await takeIncidentPhotoService();
-
       if (!captured) return;
 
       setPhoto(captured);
@@ -158,6 +156,13 @@ export default function ReportEmergencyScreen() {
     } finally {
       setIsTakingPhoto(false);
     }
+  };
+
+  const resetForm = () => {
+    setForm(initialForm);
+    setPhoto(null);
+    setSubmittedIncident(null);
+    setHasTriedCoordinates(false);
   };
 
   const handleSubmit = async () => {
@@ -209,45 +214,14 @@ export default function ReportEmergencyScreen() {
     try {
       setIsSubmitting(true);
 
-      const payload = new FormData();
-      payload.append("incidentType", form.incidentType);
-      payload.append("subIncidentType", form.subIncidentType || "");
-      payload.append("otherIncidentType", form.otherIncidentType || "");
-      payload.append("autoLocationText", form.autoLocationText || "");
-      payload.append("manualLocationText", form.manualLocationText || "");
-      payload.append("latitude", form.latitude || "");
-      payload.append("longitude", form.longitude || "");
-      payload.append("estimatedVictimCount", form.estimatedVictimCount || "1");
-      payload.append("phoneNumber", form.phoneNumber.trim());
-      payload.append("notes", form.notes || "");
-      payload.append("photo", {
-        uri: photo.uri,
-        name: photo.fileName || "incident-camera-photo.jpg",
-        type: photo.mimeType || "image/jpeg",
-      });
-
       const data = await createEmergencyReportService(form, photo);
+      setSubmittedIncident(data);
 
       showToast({
         title: "Report Submitted",
-        message: `Tracking code: ${data.trackingCode}`,
+        message: "Copy or save your tracking code.",
         type: "success",
       });
-
-      setForm({
-        incidentType: "",
-        subIncidentType: "",
-        otherIncidentType: "",
-        autoLocationText: "",
-        manualLocationText: "",
-        latitude: "",
-        longitude: "",
-        estimatedVictimCount: "1",
-        phoneNumber: "",
-        notes: "",
-      });
-      setPhoto(null);
-      setHasTriedCoordinates(false);
     } catch (error) {
       showToast({
         title: "Submission Failed",
@@ -258,6 +232,92 @@ export default function ReportEmergencyScreen() {
       setIsSubmitting(false);
     }
   };
+
+  if (submittedIncident?.trackingCode) {
+    return (
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <BackNavButton label="Back to Home" fallbackRoute="/" />
+
+        <PageHeader
+          eyebrow="Report Submitted"
+          title="Emergency Report Received"
+          subtitle="Save this tracking code. You will need it to follow up on the report."
+          icon="checkmark-circle-outline"
+        />
+
+        <FormSection title="Your Tracking Code">
+          <View
+            style={[
+              styles.successCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderRadius: radius.lg,
+                padding: spacing.lg,
+              },
+              shadow,
+            ]}
+          >
+            <StatusBadge label="RECEIVED" type="success" />
+
+            <Text style={[styles.successTitle, { color: colors.text }]}>
+              Report submitted successfully.
+            </Text>
+
+            <Text style={[typography.body, { color: colors.textMuted }]}>
+              Keep this code safe. It is the only code the public reporter uses
+              to track this emergency report.
+            </Text>
+
+            <Text
+              selectable
+              style={[
+                styles.trackingCode,
+                {
+                  color: colors.primary,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                },
+              ]}
+            >
+              {submittedIncident.trackingCode}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Incident Type: {submittedIncident.incidentType}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Estimated Patients: {submittedIncident.estimatedVictimCount}
+            </Text>
+          </View>
+        </FormSection>
+
+        <FormSection title="Next Action">
+          <AppButton
+            title="Track This Report"
+            onPress={() =>
+              router.push({
+                pathname: "/track-report",
+                params: { trackingCode: submittedIncident.trackingCode },
+              })
+            }
+          />
+
+          <AppButton
+            title="Submit Another Report"
+            onPress={resetForm}
+            variant="secondary"
+          />
+        </FormSection>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -372,9 +432,11 @@ export default function ReportEmergencyScreen() {
           <Text style={[typography.body, { color: colors.text }]}>
             Latitude: {form.latitude || (isGettingCoordinates ? "Capturing..." : "Not captured")}
           </Text>
+
           <Text style={[typography.body, { color: colors.text }]}>
             Longitude: {form.longitude || (isGettingCoordinates ? "Capturing..." : "Not captured")}
           </Text>
+
           <Text style={[typography.body, { color: colors.textMuted }]}>
             {isGettingCoordinates
               ? "Getting your current coordinates automatically..."
@@ -460,5 +522,22 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 220,
     borderRadius: 12,
+  },
+  successCard: {
+    borderWidth: 1,
+    gap: 12,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  trackingCode: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 30,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 1,
   },
 });

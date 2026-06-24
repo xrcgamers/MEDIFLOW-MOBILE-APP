@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import {
   ScrollView,
   Text,
@@ -13,23 +13,49 @@ import BackNavButton from "../../src/components/BackNavButton";
 import FormSection from "../../src/components/FormSection";
 import AppButton from "../../src/components/AppButton";
 import FormInput from "../../src/components/FormInput";
+import FormSelect from "../../src/components/FormSelect";
 import EmptyStateCard from "../../src/components/EmptyStateCard";
 import StatusBadge from "../../src/components/StatusBadge";
 import StaffNavBar from "../../src/components/StaffNavBar";
 import ThreadPanel from "../../src/components/ThreadPanel";
+import AdminReturnButton from "../../src/components/AdminReturnButton";
+import { useAuth } from "../../src/context/AuthContext";
+import { useAppTheme } from "../../src/context/ThemeContext";
+import { useToast } from "../../src/context/ToastContext";
 import {
   getPatientByIdService,
   createPatientTriageService,
   createPatientResourceRequestService,
   getResourceCategoriesService,
+  updatePatientService,
+  excludePatientFromIncidentService,
 } from "../../src/services/staffIncidentService";
+import {
+  claimPatientService,
+  releasePatientClaimService,
+} from "../../src/services/triageNurseService";
 import {
   getPatientThreadUiService,
   getResourceRequestThreadUiService,
 } from "../../src/services/communicationService";
-import { useAppTheme } from "../../src/context/ThemeContext";
-import { useToast } from "../../src/context/ToastContext";
-import AdminReturnButton from "../../src/components/AdminReturnButton";
+
+const PRIORITY_OPTIONS = [
+  { label: "Low", value: "LOW" },
+  { label: "Moderate", value: "MODERATE" },
+  { label: "High", value: "HIGH" },
+  { label: "Critical", value: "CRITICAL" },
+];
+
+const BLOOD_TYPE_OPTIONS = [
+  { label: "A+", value: "A+" },
+  { label: "A-", value: "A-" },
+  { label: "B+", value: "B+" },
+  { label: "B-", value: "B-" },
+  { label: "AB+", value: "AB+" },
+  { label: "AB-", value: "AB-" },
+  { label: "O+", value: "O+" },
+  { label: "O-", value: "O-" },
+];
 
 function getPriorityType(level) {
   switch (level) {
@@ -56,8 +82,6 @@ function getRequestType(status) {
     case "REJECTED":
     case "CANCELLED":
       return "danger";
-    case "REQUESTED":
-    case "DELAYED":
     default:
       return "info";
   }
@@ -78,46 +102,6 @@ function getCategoryBadgeType(categoryName) {
   }
 }
 
-function buildSectionProgress(resourceRequests = []) {
-  const categories = ["BLOOD", "IMAGING", "THEATRE", "BED"];
-
-  return categories
-    .map((category) => {
-      const matches = resourceRequests.filter(
-        (item) => item.resourceCategory?.name === category
-      );
-
-      if (!matches.length) return null;
-
-      const completed = matches.some((item) => item.requestStatus === "COMPLETED");
-      const inProgress = matches.some((item) =>
-        ["APPROVED", "PARTIALLY_ALLOCATED", "RESERVED", "IN_PROGRESS"].includes(
-          item.requestStatus
-        )
-      );
-      const rejected = matches.every((item) =>
-        ["REJECTED", "CANCELLED"].includes(item.requestStatus)
-      );
-
-      let label = `${category} REQUESTED`;
-      let type = getCategoryBadgeType(category);
-
-      if (completed) {
-        label = `${category} COMPLETE`;
-        type = "success";
-      } else if (inProgress) {
-        label = `${category} IN PROGRESS`;
-        type = "warning";
-      } else if (rejected) {
-        label = `${category} REJECTED`;
-        type = "danger";
-      }
-
-      return { category, label, type };
-    })
-    .filter(Boolean);
-}
-
 function getIncidentContextLabel(incident) {
   if (!incident) return "No incident context";
   if (incident.subIncidentType) {
@@ -126,85 +110,26 @@ function getIncidentContextLabel(incident) {
   return incident.incidentType || "Incident context available";
 }
 
-function SearchableCategoryPicker({
-  label,
-  searchValue,
-  onChangeSearch,
-  options,
-  onSelect,
-  selectedLabel,
-  colors,
-  typography,
-  radius,
-}) {
-  const filtered = useMemo(() => {
-    const q = (searchValue || "").trim().toLowerCase();
-    if (!q) return options.slice(0, 12);
-
-    return options
-      .filter((item) => item.label.toLowerCase().includes(q))
-      .slice(0, 12);
-  }, [options, searchValue]);
-
-  return (
-    <View style={{ marginBottom: 12 }}>
-      <FormInput
-        label={label}
-        value={searchValue}
-        onChangeText={onChangeSearch}
-        placeholder="Search resource category"
-      />
-
-      {!!filtered.length && (
-        <View
-          style={[
-            styles.suggestionBox,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderRadius: radius.lg,
-            },
-          ]}
-        >
-          {filtered.map((item, index) => (
-            <Pressable
-              key={item.value}
-              onPress={() => onSelect(item)}
-              style={[
-                styles.suggestionItem,
-                {
-                  borderBottomColor: colors.border,
-                  borderBottomWidth: index === filtered.length - 1 ? 0 : 1,
-                },
-              ]}
-            >
-              <Text style={[typography.body, { color: colors.text }]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      {!!selectedLabel && (
-        <Text style={[typography.body, { color: colors.textMuted, marginTop: 6 }]}>
-          Selected Category: {selectedLabel}
-        </Text>
-      )}
-    </View>
-  );
-}
-
 export default function PatientDetailsScreen() {
   const { patientId } = useLocalSearchParams();
+  const { user } = useAuth();
   const { colors, typography, radius, spacing, shadow } = useAppTheme();
   const { showToast } = useToast();
 
   const [patient, setPatient] = useState(null);
   const [resourceCategories, setResourceCategories] = useState([]);
-  const [resourceCategorySearch, setResourceCategorySearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isReleasingClaim, setIsReleasingClaim] = useState(false);
+
+  const [identityForm, setIdentityForm] = useState({
+    fullName: "",
+    sex: "",
+    estimatedAge: "",
+  });
+  const [isSavingIdentity, setIsSavingIdentity] = useState(false);
+  const [isExcludingPatient, setIsExcludingPatient] = useState(false);
 
   const [triageForm, setTriageForm] = useState({
     unconscious: false,
@@ -218,18 +143,20 @@ export default function PatientDetailsScreen() {
 
   const [resourceForm, setResourceForm] = useState({
     resourceCategoryId: "",
-    priority: "",
+    priority: "MODERATE",
     requestReason: "",
     requestedQuantity: "",
-    approvedQuantity: "",
     unitOfMeasureSnapshot: "",
+    bloodType: "",
+    imagingType: "",
+    theatreNeed: "",
+    bedType: "",
   });
   const [isSubmittingResource, setIsSubmittingResource] = useState(false);
 
   const loadPatient = async (refresh = false) => {
     try {
-      if (refresh) setIsRefreshing(true);
-      else setIsLoading(true);
+      refresh ? setIsRefreshing(true) : setIsLoading(true);
 
       const [patientData, categories] = await Promise.all([
         getPatientByIdService(patientId),
@@ -238,6 +165,15 @@ export default function PatientDetailsScreen() {
 
       setPatient(patientData);
       setResourceCategories(categories || []);
+
+      setIdentityForm({
+        fullName: patientData?.fullName || "",
+        sex: patientData?.sex || "",
+        estimatedAge:
+          patientData?.estimatedAge === null || patientData?.estimatedAge === undefined
+            ? ""
+            : String(patientData.estimatedAge),
+      });
     } catch (error) {
       showToast({
         title: "Patient Load Failed",
@@ -256,11 +192,6 @@ export default function PatientDetailsScreen() {
 
   const latestTriage = useMemo(() => patient?.triages?.[0] || null, [patient]);
 
-  const sectionProgress = useMemo(
-    () => buildSectionProgress(patient?.resourceRequests || []),
-    [patient]
-  );
-
   const resourceCategoryOptions = useMemo(
     () =>
       (resourceCategories || []).map((item) => ({
@@ -270,29 +201,133 @@ export default function PatientDetailsScreen() {
     [resourceCategories]
   );
 
-  const selectedCategoryLabel = useMemo(() => {
-    return (
-      resourceCategoryOptions.find(
-        (item) => item.value === resourceForm.resourceCategoryId
-      )?.label || ""
-    );
-  }, [resourceCategoryOptions, resourceForm.resourceCategoryId]);
-
   const selectedCategory = useMemo(
     () => resourceCategories.find((item) => item.id === resourceForm.resourceCategoryId),
     [resourceCategories, resourceForm.resourceCategoryId]
   );
 
-  const isPooledCategory = ["BLOOD", "BED"].includes(selectedCategory?.name);
+  const selectedCategoryName = selectedCategory?.name || "";
+  const assignedToCurrentUser = patient?.assignedTriageNurseId === user?.id;
+  const unassigned = !patient?.assignedTriageNurseId;
+  const canEdit = user?.role === "ADMIN" || assignedToCurrentUser;
+
+  const handleClaimPatient = async () => {
+    try {
+      setIsClaiming(true);
+      await claimPatientService(patientId);
+
+      showToast({
+        title: "Patient Claimed",
+        message: "This patient is now assigned to you.",
+        type: "success",
+      });
+
+      await loadPatient(true);
+    } catch (error) {
+      showToast({
+        title: "Claim Failed",
+        message: error.message || "Unable to claim patient.",
+        type: "error",
+      });
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const handleReleaseClaim = async () => {
+    try {
+      setIsReleasingClaim(true);
+      await releasePatientClaimService(patientId);
+
+      showToast({
+        title: "Claim Released",
+        message: "Patient returned to the unassigned queue.",
+        type: "success",
+      });
+
+      await loadPatient(true);
+    } catch (error) {
+      showToast({
+        title: "Release Failed",
+        message: error.message || "Unable to release patient claim.",
+        type: "error",
+      });
+    } finally {
+      setIsReleasingClaim(false);
+    }
+  };
 
   const handleToggleBoolean = (key) => {
+    if (!canEdit) return;
+
     setTriageForm((prev) => ({
       ...prev,
       [key]: !prev[key],
     }));
   };
 
+  const handleSaveIdentity = async () => {
+    if (!canEdit) return;
+
+    try {
+      setIsSavingIdentity(true);
+
+      await updatePatientService(patientId, {
+        fullName: identityForm.fullName.trim() || null,
+        sex: identityForm.sex.trim() || null,
+        estimatedAge:
+          identityForm.estimatedAge === "" ? null : Number(identityForm.estimatedAge),
+      });
+
+      showToast({
+        title: "Patient Updated",
+        message: "Patient identity details saved.",
+        type: "success",
+      });
+
+      await loadPatient(true);
+    } catch (error) {
+      showToast({
+        title: "Update Failed",
+        message: error.message || "Unable to update patient.",
+        type: "error",
+      });
+    } finally {
+      setIsSavingIdentity(false);
+    }
+  };
+
+  const handleExcludePatient = async () => {
+    if (!canEdit) return;
+
+    try {
+      setIsExcludingPatient(true);
+
+      await excludePatientFromIncidentService(patientId, {
+        note: "Removed by triage nurse during patient verification.",
+      });
+
+      showToast({
+        title: "Patient Removed",
+        message: "Patient placeholder removed from active triage queue.",
+        type: "success",
+      });
+
+      router.replace("/staff/triage-nurse");
+    } catch (error) {
+      showToast({
+        title: "Remove Failed",
+        message: error.message || "Unable to remove patient.",
+        type: "error",
+      });
+    } finally {
+      setIsExcludingPatient(false);
+    }
+  };
+
   const handleSubmitTriage = async () => {
+    if (!canEdit) return;
+
     try {
       setIsSubmittingTriage(true);
 
@@ -332,11 +367,59 @@ export default function PatientDetailsScreen() {
     }
   };
 
+  const buildResourceReason = () => {
+    const base = resourceForm.requestReason.trim();
+
+    if (selectedCategoryName === "BLOOD") {
+      return `${base}\nBlood Type: ${resourceForm.bloodType || "Not specified"}\nPints Requested: ${resourceForm.requestedQuantity || "Not specified"}`;
+    }
+
+    if (selectedCategoryName === "IMAGING") {
+      return `${base}\nImaging Type: ${resourceForm.imagingType || "Not specified"}`;
+    }
+
+    if (selectedCategoryName === "THEATRE") {
+      return `${base}\nTheatre Need: ${resourceForm.theatreNeed || "Not specified"}`;
+    }
+
+    if (selectedCategoryName === "BED") {
+      return `${base}\nBed Type/Ward: ${resourceForm.bedType || "Not specified"}`;
+    }
+
+    return base;
+  };
+
   const handleSubmitResourceRequest = async () => {
+    if (!canEdit) return;
+
     if (!resourceForm.resourceCategoryId || !resourceForm.requestReason.trim()) {
       showToast({
         title: "Missing Resource Data",
         message: "Select a resource category and enter a reason.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (selectedCategoryName === "BLOOD" && !resourceForm.bloodType) {
+      showToast({
+        title: "Blood Type Required",
+        message: "Select the required blood type.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (
+      ["BLOOD", "BED"].includes(selectedCategoryName) &&
+      (!resourceForm.requestedQuantity || Number(resourceForm.requestedQuantity) < 1)
+    ) {
+      showToast({
+        title: "Quantity Required",
+        message:
+          selectedCategoryName === "BLOOD"
+            ? "Enter the number of pints required."
+            : "Enter the number of beds required.",
         type: "warning",
       });
       return;
@@ -347,17 +430,18 @@ export default function PatientDetailsScreen() {
 
       await createPatientResourceRequestService(patientId, {
         resourceCategoryId: resourceForm.resourceCategoryId,
-        priority: resourceForm.priority || null,
-        requestReason: resourceForm.requestReason.trim(),
+        priority: resourceForm.priority,
+        requestReason: buildResourceReason(),
         requestedQuantity:
           resourceForm.requestedQuantity === ""
-            ? null
+            ? 1
             : Number(resourceForm.requestedQuantity),
-        approvedQuantity:
-          resourceForm.approvedQuantity === ""
-            ? null
-            : Number(resourceForm.approvedQuantity),
-        unitOfMeasureSnapshot: resourceForm.unitOfMeasureSnapshot.trim() || null,
+        unitOfMeasureSnapshot:
+          selectedCategoryName === "BLOOD"
+            ? "pints"
+            : selectedCategoryName === "BED"
+            ? "beds"
+            : resourceForm.unitOfMeasureSnapshot.trim() || null,
       });
 
       showToast({
@@ -368,13 +452,15 @@ export default function PatientDetailsScreen() {
 
       setResourceForm({
         resourceCategoryId: "",
-        priority: "",
+        priority: "MODERATE",
         requestReason: "",
         requestedQuantity: "",
-        approvedQuantity: "",
         unitOfMeasureSnapshot: "",
+        bloodType: "",
+        imagingType: "",
+        theatreNeed: "",
+        bedType: "",
       });
-      setResourceCategorySearch("");
 
       await loadPatient(true);
     } catch (error) {
@@ -394,18 +480,15 @@ export default function PatientDetailsScreen() {
         <ScrollView
           contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
         >
-          <BackNavButton label="Back to Incident" fallbackRoute="/staff/incidents" />
+          <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
           <PageHeader
             eyebrow="Patient Coordination"
             title="Patient Details"
             subtitle="Loading patient details..."
             icon="person-outline"
           />
-          
-          <AdminReturnButton />
-
         </ScrollView>
-        <StaffNavBar activeRoute="/staff/incidents" />
+        <StaffNavBar activeRoute="/staff/triage-nurse" />
       </>
     );
   }
@@ -416,7 +499,7 @@ export default function PatientDetailsScreen() {
         <ScrollView
           contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
         >
-          <BackNavButton label="Back to Incident" fallbackRoute="/staff/incidents" />
+          <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
           <PageHeader
             eyebrow="Patient Coordination"
             title="Patient Details"
@@ -431,7 +514,7 @@ export default function PatientDetailsScreen() {
             onAction={() => loadPatient(true)}
           />
         </ScrollView>
-        <StaffNavBar activeRoute="/staff/incidents" />
+        <StaffNavBar activeRoute="/staff/triage-nurse" />
       </>
     );
   }
@@ -440,19 +523,71 @@ export default function PatientDetailsScreen() {
     <>
       <ScrollView
         contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadPatient(true)} />}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={() => loadPatient(true)} />
+        }
       >
-        <BackNavButton
-          label="Back to Incident"
-          fallbackRoute={`/staff/incident-details?id=${patient.incidentId}`}
-        />
+        <BackNavButton label="Back to Triage Queue" fallbackRoute="/staff/triage-nurse" />
 
         <PageHeader
           eyebrow="Patient Coordination"
-          title={patient.patientCode}
+          title={patient.fullName || patient.patientCode}
           subtitle={`Linked to incident ${patient.incident?.trackingCode || ""}`}
           icon="person-outline"
         />
+
+        <AdminReturnButton />
+
+        <FormSection title="Patient Assignment">
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderRadius: radius.lg,
+                padding: spacing.md,
+              },
+              shadow,
+            ]}
+          >
+            <Text style={[typography.body, { color: colors.text }]}>
+              Assigned Triage Nurse:{" "}
+              {patient.assignedTriageNurse?.name || "Unassigned"}
+            </Text>
+
+            {assignedToCurrentUser ? (
+              <StatusBadge label="ASSIGNED TO YOU" type="success" />
+            ) : unassigned ? (
+              <StatusBadge label="UNASSIGNED" type="warning" />
+            ) : (
+              <StatusBadge label="ASSIGNED TO ANOTHER NURSE" type="danger" />
+            )}
+
+            {unassigned ? (
+              <AppButton
+                title={isClaiming ? "Claiming..." : "Claim Patient"}
+                onPress={handleClaimPatient}
+                loading={isClaiming}
+                disabled={isClaiming}
+              />
+            ) : assignedToCurrentUser ? (
+              <AppButton
+                title={isReleasingClaim ? "Releasing..." : "Release Claim"}
+                onPress={handleReleaseClaim}
+                loading={isReleasingClaim}
+                disabled={isReleasingClaim}
+                variant="secondary"
+              />
+            ) : null}
+
+            {!canEdit ? (
+              <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+                This patient is assigned to another triage nurse. You can view details but cannot edit.
+              </Text>
+            ) : null}
+          </View>
+        </FormSection>
 
         <FormSection title="Patient Summary">
           <View
@@ -468,10 +603,10 @@ export default function PatientDetailsScreen() {
             ]}
           >
             <Text style={[typography.body, { color: colors.text }]}>
-              Status: {patient.status}
+              Patient Code: {patient.patientCode}
             </Text>
             <Text style={[typography.body, { color: colors.text }]}>
-              Placeholder: {patient.isPlaceholder ? "Yes" : "No"}
+              Status: {patient.status}
             </Text>
             <Text style={[typography.body, { color: colors.text }]}>
               Name: {patient.fullName || "Unknown"}
@@ -485,9 +620,6 @@ export default function PatientDetailsScreen() {
             <Text style={[typography.body, { color: colors.text }]}>
               Incident Context: {getIncidentContextLabel(patient.incident)}
             </Text>
-            <Text style={[typography.body, { color: colors.textMuted }]}>
-              Triage scoring uses both patient symptoms and incident context.
-            </Text>
 
             <View style={styles.badgeRow}>
               {latestTriage ? (
@@ -495,76 +627,82 @@ export default function PatientDetailsScreen() {
                   label={`TRIAGE ${latestTriage.urgencyLevel}`}
                   type={getPriorityType(latestTriage.urgencyLevel)}
                 />
-              ) : null}
-
-              {sectionProgress.map((item) => (
-                <StatusBadge key={item.category} label={item.label} type={item.type} />
-              ))}
+              ) : (
+                <StatusBadge label="UNTRIAGED" type="warning" />
+              )}
             </View>
-
-            {latestTriage?.reasons?.length ? (
-              <View style={{ marginTop: 8 }}>
-                <Text style={[typography.body, { color: colors.textMuted }]}>
-                  Latest Triage Factors:
-                </Text>
-                {latestTriage.reasons.slice(0, 5).map((reason, index) => (
-                  <Text key={`${reason}-${index}`} style={[typography.body, { color: colors.text }]}>
-                    • {reason}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
           </View>
         </FormSection>
 
+        <FormSection title="Patient Identity">
+          <FormInput
+            label="Patient Real Name"
+            value={identityForm.fullName}
+            onChangeText={(value) =>
+              setIdentityForm((prev) => ({ ...prev, fullName: value }))
+            }
+            placeholder="Enter patient name if known"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Sex"
+            value={identityForm.sex}
+            onChangeText={(value) =>
+              setIdentityForm((prev) => ({ ...prev, sex: value }))
+            }
+            placeholder="Male / Female / Unknown"
+            editable={canEdit}
+          />
+
+          <FormInput
+            label="Estimated Age"
+            value={identityForm.estimatedAge}
+            onChangeText={(value) =>
+              setIdentityForm((prev) => ({ ...prev, estimatedAge: value }))
+            }
+            keyboardType="numeric"
+            placeholder="e.g. 35"
+            editable={canEdit}
+          />
+
+          <AppButton
+            title={isSavingIdentity ? "Saving..." : "Save Patient Identity"}
+            onPress={handleSaveIdentity}
+            loading={isSavingIdentity}
+            disabled={isSavingIdentity || !canEdit}
+          />
+
+          <AppButton
+            title={isExcludingPatient ? "Removing..." : "Remove Invalid Patient Placeholder"}
+            onPress={handleExcludePatient}
+            loading={isExcludingPatient}
+            disabled={isExcludingPatient || !canEdit}
+            variant="secondary"
+          />
+        </FormSection>
+
         <FormSection title="Run Triage">
-          <Text style={[typography.body, { color: colors.textMuted, marginBottom: 10 }]}>
-            Clinical signs remain primary. Incident type and subtype are added as context.
-          </Text>
-
-          <Pressable
-            style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => handleToggleBoolean("unconscious")}
-          >
-            <Text style={[typography.body, { color: colors.text }]}>Unconscious</Text>
-            <Text style={[typography.body, { color: colors.text }]}>
-              {triageForm.unconscious ? "Yes" : "No"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => handleToggleBoolean("notBreathingNormally")}
-          >
-            <Text style={[typography.body, { color: colors.text }]}>
-              Not Breathing Normally
-            </Text>
-            <Text style={[typography.body, { color: colors.text }]}>
-              {triageForm.notBreathingNormally ? "Yes" : "No"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => handleToggleBoolean("severeBleeding")}
-          >
-            <Text style={[typography.body, { color: colors.text }]}>Severe Bleeding</Text>
-            <Text style={[typography.body, { color: colors.text }]}>
-              {triageForm.severeBleeding ? "Yes" : "No"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => handleToggleBoolean("multipleVictimsContext")}
-          >
-            <Text style={[typography.body, { color: colors.text }]}>
-              Multiple Casualty Context
-            </Text>
-            <Text style={[typography.body, { color: colors.text }]}>
-              {triageForm.multipleVictimsContext ? "Yes" : "No"}
-            </Text>
-          </Pressable>
+          {[
+            ["unconscious", "Unconscious"],
+            ["notBreathingNormally", "Not Breathing Normally"],
+            ["severeBleeding", "Severe Bleeding"],
+            ["multipleVictimsContext", "Multiple Casualty Context"],
+          ].map(([key, label]) => (
+            <Pressable
+              key={key}
+              style={[
+                styles.toggleRow,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+              ]}
+              onPress={() => handleToggleBoolean(key)}
+            >
+              <Text style={[typography.body, { color: colors.text }]}>{label}</Text>
+              <Text style={[typography.body, { color: colors.text }]}>
+                {triageForm[key] ? "Yes" : "No"}
+              </Text>
+            </Pressable>
+          ))}
 
           <FormInput
             label="Pain Score (0-10)"
@@ -574,6 +712,7 @@ export default function PatientDetailsScreen() {
             }
             keyboardType="numeric"
             placeholder="e.g. 7"
+            editable={canEdit}
           />
 
           <FormInput
@@ -584,155 +723,139 @@ export default function PatientDetailsScreen() {
             }
             placeholder="Optional triage note"
             multiline
+            editable={canEdit}
           />
 
           <AppButton
             title={isSubmittingTriage ? "Saving Triage..." : "Save Triage"}
             onPress={handleSubmitTriage}
             loading={isSubmittingTriage}
-            disabled={isSubmittingTriage}
+            disabled={isSubmittingTriage || !canEdit}
           />
         </FormSection>
 
         <FormSection title="Create Resource Request">
-          <View
-            style={[
-              styles.summaryCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-              },
-              shadow,
-            ]}
-          >
-            <Text style={[typography.body, { color: colors.text }]}>
-              Incident Context: {getIncidentContextLabel(patient.incident)}
-            </Text>
-            <Text style={[typography.body, { color: colors.textMuted }]}>
-              This context is also available to AI priority and resource coordination.
-            </Text>
-          </View>
-
-          <SearchableCategoryPicker
-            label="Search Resource Category"
-            searchValue={resourceCategorySearch}
-            onChangeSearch={(value) => {
-              setResourceCategorySearch(value);
-
-              const exact = resourceCategoryOptions.find(
-                (item) => item.label.toLowerCase() === value.trim().toLowerCase()
-              );
-
-              if (exact) {
-                setResourceForm((prev) => ({
-                  ...prev,
-                  resourceCategoryId: exact.value,
-                }));
-              }
-            }}
-            options={resourceCategoryOptions}
-            onSelect={(item) => {
-              setResourceCategorySearch(item.label);
+          <FormSelect
+            label="Resource Category"
+            selectedValue={resourceForm.resourceCategoryId}
+            onValueChange={(value) =>
               setResourceForm((prev) => ({
                 ...prev,
-                resourceCategoryId: item.value,
-              }));
-            }}
-            selectedLabel={selectedCategoryLabel}
-            colors={colors}
-            typography={typography}
-            radius={radius}
-          />
-
-          <FormInput
-            label="Priority"
-            value={resourceForm.priority}
-            onChangeText={(value) =>
-              setResourceForm((prev) => ({
-                ...prev,
-                priority: value,
+                resourceCategoryId: value,
+                requestedQuantity: "",
+                bloodType: "",
+                imagingType: "",
+                theatreNeed: "",
+                bedType: "",
               }))
             }
-            placeholder="LOW, MODERATE, HIGH, or CRITICAL"
+            options={resourceCategoryOptions}
+            placeholder="Select resource category"
+            enabled={canEdit}
           />
+
+          <FormSelect
+            label="Priority"
+            selectedValue={resourceForm.priority}
+            onValueChange={(value) =>
+              setResourceForm((prev) => ({ ...prev, priority: value }))
+            }
+            options={PRIORITY_OPTIONS}
+            placeholder="Select priority"
+            enabled={canEdit}
+          />
+
+          {selectedCategoryName === "BLOOD" ? (
+            <>
+              <FormSelect
+                label="Blood Type"
+                selectedValue={resourceForm.bloodType}
+                onValueChange={(value) =>
+                  setResourceForm((prev) => ({ ...prev, bloodType: value }))
+                }
+                options={BLOOD_TYPE_OPTIONS}
+                placeholder="Select blood type"
+                enabled={canEdit}
+              />
+
+              <FormInput
+                label="Pints Required"
+                value={resourceForm.requestedQuantity}
+                onChangeText={(value) =>
+                  setResourceForm((prev) => ({ ...prev, requestedQuantity: value }))
+                }
+                keyboardType="numeric"
+                placeholder="e.g. 2"
+                editable={canEdit}
+              />
+            </>
+          ) : null}
+
+          {selectedCategoryName === "BED" ? (
+            <>
+              <FormInput
+                label="Bed Type / Ward"
+                value={resourceForm.bedType}
+                onChangeText={(value) =>
+                  setResourceForm((prev) => ({ ...prev, bedType: value }))
+                }
+                placeholder="e.g. Emergency ward, ICU"
+                editable={canEdit}
+              />
+
+              <FormInput
+                label="Beds Required"
+                value={resourceForm.requestedQuantity}
+                onChangeText={(value) =>
+                  setResourceForm((prev) => ({ ...prev, requestedQuantity: value }))
+                }
+                keyboardType="numeric"
+                placeholder="e.g. 1"
+                editable={canEdit}
+              />
+            </>
+          ) : null}
+
+          {selectedCategoryName === "IMAGING" ? (
+            <FormInput
+              label="Imaging Type"
+              value={resourceForm.imagingType}
+              onChangeText={(value) =>
+                setResourceForm((prev) => ({ ...prev, imagingType: value }))
+              }
+              placeholder="e.g. X-ray, CT scan"
+              editable={canEdit}
+            />
+          ) : null}
+
+          {selectedCategoryName === "THEATRE" ? (
+            <FormInput
+              label="Theatre / Procedure Need"
+              value={resourceForm.theatreNeed}
+              onChangeText={(value) =>
+                setResourceForm((prev) => ({ ...prev, theatreNeed: value }))
+              }
+              placeholder="e.g. Emergency surgery"
+              editable={canEdit}
+            />
+          ) : null}
 
           <FormInput
             label="Request Reason"
             value={resourceForm.requestReason}
             onChangeText={(value) =>
-              setResourceForm((prev) => ({
-                ...prev,
-                requestReason: value,
-              }))
+              setResourceForm((prev) => ({ ...prev, requestReason: value }))
             }
             placeholder="Explain why this resource is needed"
             multiline
+            editable={canEdit}
           />
-
-          {isPooledCategory ? (
-            <>
-              <FormInput
-                label="Requested Quantity"
-                value={resourceForm.requestedQuantity}
-                onChangeText={(value) =>
-                  setResourceForm((prev) => ({
-                    ...prev,
-                    requestedQuantity: value,
-                  }))
-                }
-                keyboardType="numeric"
-                placeholder="e.g. 3"
-              />
-              <FormInput
-                label="Approved Quantity"
-                value={resourceForm.approvedQuantity}
-                onChangeText={(value) =>
-                  setResourceForm((prev) => ({
-                    ...prev,
-                    approvedQuantity: value,
-                  }))
-                }
-                keyboardType="numeric"
-                placeholder="e.g. 2"
-              />
-              <FormInput
-                label="Unit of Measure"
-                value={resourceForm.unitOfMeasureSnapshot}
-                onChangeText={(value) =>
-                  setResourceForm((prev) => ({
-                    ...prev,
-                    unitOfMeasureSnapshot: value,
-                  }))
-                }
-                placeholder="e.g. pints, beds"
-              />
-            </>
-          ) : (
-            <FormInput
-              label="Unit Note"
-              value={resourceForm.unitOfMeasureSnapshot}
-              onChangeText={(value) =>
-                setResourceForm((prev) => ({
-                  ...prev,
-                  unitOfMeasureSnapshot: value,
-                }))
-              }
-              placeholder="Optional note for named resource"
-            />
-          )}
-
-          <Text style={[typography.body, { color: colors.textMuted, marginBottom: 10 }]}>
-            The handling section is assigned automatically from the selected resource
-            category.
-          </Text>
 
           <AppButton
             title={isSubmittingResource ? "Creating Request..." : "Create Resource Request"}
             onPress={handleSubmitResourceRequest}
             loading={isSubmittingResource}
-            disabled={isSubmittingResource}
+            disabled={isSubmittingResource || !canEdit}
           />
         </FormSection>
 
@@ -778,61 +901,14 @@ export default function PatientDetailsScreen() {
                 <Text style={[typography.body, { color: colors.text }]}>
                   Reason: {request.requestReason}
                 </Text>
-
-                {request.requestedQuantity !== null &&
-                request.requestedQuantity !== undefined ? (
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Requested: {request.requestedQuantity}{" "}
-                    {request.unitOfMeasureSnapshot || ""}
-                  </Text>
-                ) : null}
-
-                {request.approvedQuantity !== null &&
-                request.approvedQuantity !== undefined ? (
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Approved: {request.approvedQuantity}{" "}
-                    {request.unitOfMeasureSnapshot || ""}
-                  </Text>
-                ) : null}
-
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Requested: {request.requestedQuantity ?? 1}{" "}
+                  {request.unitOfMeasureSnapshot || ""}
+                </Text>
                 <Text style={[typography.body, { color: colors.text }]}>
                   Fulfilled: {request.fulfilledQuantity ?? 0}{" "}
                   {request.unitOfMeasureSnapshot || ""}
                 </Text>
-
-                {request.primaryResourceItem ? (
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Named Resource:{" "}
-                    {request.primaryResourceItem.subType ||
-                      request.primaryResourceItem.label}
-                  </Text>
-                ) : null}
-
-                {request.allocations?.length ? (
-                  <View style={{ marginTop: 8 }}>
-                    <Text style={[typography.body, { color: colors.textMuted }]}>
-                      Stock Entries Used:
-                    </Text>
-                    {request.allocations.map((allocation) => (
-                      <Text
-                        key={allocation.id}
-                        style={[typography.body, { color: colors.text }]}
-                      >
-                        • {allocation.resourceItem?.subType || allocation.resourceItem?.label} —{" "}
-                        {allocation.reservedQuantity ?? 1}{" "}
-                        {allocation.unitOfMeasureSnapshot ||
-                          request.unitOfMeasureSnapshot ||
-                          ""}
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
-
-                {request.rejectionReason ? (
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Rejection Reason: {request.rejectionReason}
-                  </Text>
-                ) : null}
 
                 <ThreadPanel
                   title="Resource Request Thread"
@@ -851,7 +927,7 @@ export default function PatientDetailsScreen() {
         </FormSection>
       </ScrollView>
 
-      <StaffNavBar activeRoute="/staff/incidents" />
+      <StaffNavBar activeRoute="/staff/triage-nurse" />
     </>
   );
 }
@@ -865,11 +941,13 @@ const styles = StyleSheet.create({
   summaryCard: {
     borderWidth: 1,
     marginBottom: 10,
+    gap: 8,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: 8,
+    gap: 8,
   },
   toggleRow: {
     borderWidth: 1,
@@ -884,14 +962,5 @@ const styles = StyleSheet.create({
   requestCard: {
     borderWidth: 1,
     marginBottom: 10,
-  },
-  suggestionBox: {
-    borderWidth: 1,
-    marginTop: 4,
-    overflow: "hidden",
-  },
-  suggestionItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
   },
 });
