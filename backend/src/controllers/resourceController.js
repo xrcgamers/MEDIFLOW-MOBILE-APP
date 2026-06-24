@@ -6,21 +6,31 @@ function toNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function deriveInventoryStatus({ status, currentQuantity, availableQuantity }) {
-  if (status === "INACTIVE") return "INACTIVE";
-  if (status === "RESERVED") return "RESERVED";
+function deriveInventoryStatus(item, availableQuantity) {
+  if (item.status === "INACTIVE") return "INACTIVE";
 
-  const available = toNumberOrNull(availableQuantity);
-  const current = toNumberOrNull(currentQuantity);
+  if (availableQuantity === null || availableQuantity === undefined) {
+    return item.status || "AVAILABLE";
+  }
 
-  if (available === null) return status || "AVAILABLE";
+  const available = Number(availableQuantity);
+  const current = Number(item.currentQuantity || 0);
+  const unit = String(item.unitOfMeasure || "").toLowerCase();
+  const categoryName = String(item.category?.name || "").toUpperCase();
+
+  const isReusableUnit =
+    ["IMAGING", "THEATRE"].includes(categoryName) ||
+    ["unit", "units", "room", "rooms", "machine", "machines", "scanner", "scanners"].includes(unit);
+
   if (available <= 0) return "RESERVED";
+
+  if (isReusableUnit && available >= 1) {
+    return "AVAILABLE";
+  }
+
   if (available <= 2) return "CRITICAL";
 
-  if (current !== null && current > 0) {
-    const ratio = available / current;
-    if (ratio <= 0.25) return "LOW";
-  }
+  if (current > 0 && available / current <= 0.25) return "LOW";
 
   if (available <= 5) return "LOW";
 

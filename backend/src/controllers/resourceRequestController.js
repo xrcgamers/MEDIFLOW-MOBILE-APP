@@ -38,14 +38,31 @@ function deriveInventoryStatus(item, availableQuantity) {
 
   const available = Number(availableQuantity);
   const current = Number(item.currentQuantity || 0);
+  const unit = String(item.unitOfMeasure || "").toLowerCase();
+  const categoryName = String(item.category?.name || "").toUpperCase();
+
+  const isReusableUnit =
+    ["IMAGING", "THEATRE"].includes(categoryName) ||
+    [
+      "unit",
+      "units",
+      "room",
+      "rooms",
+      "machine",
+      "machines",
+      "scanner",
+      "scanners",
+    ].includes(unit);
 
   if (available <= 0) return "RESERVED";
+
+  if (isReusableUnit && available >= 1) {
+    return "AVAILABLE";
+  }
+
   if (available <= 2) return "CRITICAL";
 
-  if (current > 0) {
-    const ratio = available / current;
-    if (ratio <= 0.25) return "LOW";
-  }
+  if (current > 0 && available / current <= 0.25) return "LOW";
 
   if (available <= 5) return "LOW";
 
@@ -76,10 +93,18 @@ async function getResourceRequests(req, res) {
         patient: true,
         incident: true,
         resourceCategory: true,
-        primaryResourceItem: true,
+        primaryResourceItem: {
+          include: {
+            category: true,
+          },
+        },
         allocations: {
           include: {
-            resourceItem: true,
+            resourceItem: {
+              include: {
+                category: true,
+              },
+            },
           },
           orderBy: {
             allocatedAt: "desc",
@@ -172,10 +197,18 @@ async function createPatientResourceRequest(req, res) {
         patient: true,
         incident: true,
         resourceCategory: true,
-        primaryResourceItem: true,
+        primaryResourceItem: {
+          include: {
+            category: true,
+          },
+        },
         allocations: {
           include: {
-            resourceItem: true,
+            resourceItem: {
+              include: {
+                category: true,
+              },
+            },
           },
         },
       },
@@ -196,8 +229,8 @@ async function createPatientResourceRequest(req, res) {
 
     await createAuditLog({
       actionType: "RESOURCE_REQUEST_CREATED",
-      actorUserId: req.user?.id,
-      actorRole: req.user?.role,
+      actorUserId: req.user?.id || null,
+      actorRole: req.user?.role || null,
       incidentId: patient.incidentId,
       patientId: patient.id,
       resourceRequestId: request.id,
@@ -280,10 +313,18 @@ async function updateResourceRequest(req, res) {
         patient: true,
         incident: true,
         resourceCategory: true,
-        primaryResourceItem: true,
+        primaryResourceItem: {
+          include: {
+            category: true,
+          },
+        },
         allocations: {
           include: {
-            resourceItem: true,
+            resourceItem: {
+              include: {
+                category: true,
+              },
+            },
           },
         },
       },
@@ -318,8 +359,8 @@ async function updateResourceRequest(req, res) {
 
     await createAuditLog({
       actionType: "RESOURCE_REQUEST_UPDATED",
-      actorUserId: req.user?.id,
-      actorRole: req.user?.role,
+      actorUserId: req.user?.id || null,
+      actorRole: req.user?.role || null,
       incidentId: updated.incidentId,
       patientId: updated.patientId,
       resourceRequestId: updated.id,
@@ -399,6 +440,9 @@ async function allocateResourceToRequest(req, res) {
 
     const item = await prisma.resourceItem.findUnique({
       where: { id: resourceItemId },
+      include: {
+        category: true,
+      },
     });
 
     if (!item) {
@@ -435,7 +479,11 @@ async function allocateResourceToRequest(req, res) {
           allocationStatus: "ACTIVE",
         },
         include: {
-          resourceItem: true,
+          resourceItem: {
+            include: {
+              category: true,
+            },
+          },
         },
       });
 
@@ -456,9 +504,9 @@ async function allocateResourceToRequest(req, res) {
           status: nextStatus,
           statusEvents: {
             create: {
-              eventType: "ALLOCATED",
+              oldStatus: item.status,
+              newStatus: nextStatus,
               note: `${qty} ${item.unitOfMeasure || ""} allocated to request.`,
-              actorUserId: req.user?.id || null,
             },
           },
         },
@@ -481,10 +529,18 @@ async function allocateResourceToRequest(req, res) {
           patient: true,
           incident: true,
           resourceCategory: true,
-          primaryResourceItem: true,
+          primaryResourceItem: {
+            include: {
+              category: true,
+            },
+          },
           allocations: {
             include: {
-              resourceItem: true,
+              resourceItem: {
+                include: {
+                  category: true,
+                },
+              },
             },
           },
         },
@@ -531,7 +587,11 @@ async function releaseResourceAllocation(req, res) {
     const allocation = await prisma.resourceAllocation.findUnique({
       where: { id: allocationId },
       include: {
-        resourceItem: true,
+        resourceItem: {
+          include: {
+            category: true,
+          },
+        },
         resourceRequest: true,
       },
     });
@@ -581,9 +641,9 @@ async function releaseResourceAllocation(req, res) {
             status: nextStatus,
             statusEvents: {
               create: {
-                eventType: "RELEASED",
+                oldStatus: allocation.resourceItem.status,
+                newStatus: nextStatus,
                 note: releaseReason || "Allocation released and stock restored.",
-                actorUserId: req.user?.id || null,
               },
             },
           },

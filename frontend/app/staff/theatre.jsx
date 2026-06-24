@@ -27,6 +27,8 @@ import {
   allocateResourceToRequestService,
   releaseResourceAllocationService,
 } from "../../src/services/resourceInventoryService";
+import ThreadPanel from "../../src/components/ThreadPanel";
+import { getResourceRequestThreadUiService } from "../../src/services/communicationService";
 
 function getStatusType(status) {
   switch (status) {
@@ -460,6 +462,11 @@ export default function TheatreScreen() {
                         />
                       </>
                     ) : null}
+                    <ThreadPanel
+                      title="Resource Request Communication"
+                      loadKey={request.id}
+                      loadThread={() => getResourceRequestThreadUiService(request.id)}
+                    />
                   </View>
                 );
               })

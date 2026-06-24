@@ -8,11 +8,7 @@ import { useAppTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { postThreadMessageUiService } from "../services/communicationService";
 
-export default function ThreadPanel({
-  title,
-  loadThread,
-  loadKey,
-}) {
+export default function ThreadPanel({ title, loadThread, loadKey, refreshMs = 8000 }) {
   const { colors, typography, radius, spacing, shadow } = useAppTheme();
   const { showToast } = useToast();
 
@@ -21,19 +17,21 @@ export default function ThreadPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
 
-  const refreshThread = async () => {
+  const refreshThread = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const data = await loadThread();
       setThread(data);
     } catch (error) {
-      showToast({
-        title: "Thread Load Failed",
-        message: error.message || "Unable to load communication thread.",
-        type: "error",
-      });
+      if (!silent) {
+        showToast({
+          title: "Thread Load Failed",
+          message: error.message || "Unable to load communication thread.",
+          type: "error",
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -41,25 +39,24 @@ export default function ThreadPanel({
     refreshThread();
   }, [loadKey]);
 
-  const handleSend = async () => {
-    if (!thread?.id) return;
+  useEffect(() => {
+    if (!loadKey || !refreshMs) return;
 
-    if (!message.trim()) {
-      showToast({
-        title: "Empty Message",
-        message: "Enter a message first.",
-        type: "warning",
-      });
-      return;
-    }
+    const timer = setInterval(() => {
+      refreshThread(true);
+    }, refreshMs);
+
+    return () => clearInterval(timer);
+  }, [loadKey, refreshMs]);
+
+  const handleSend = async () => {
+    if (!thread?.id || !message.trim()) return;
 
     try {
       setIsSending(true);
-      await postThreadMessageUiService(thread.id, {
-        body: message.trim(),
-      });
+      await postThreadMessageUiService(thread.id, { body: message.trim() });
       setMessage("");
-      await refreshThread();
+      await refreshThread(true);
     } catch (error) {
       showToast({
         title: "Send Failed",
@@ -74,7 +71,9 @@ export default function ThreadPanel({
   return (
     <FormSection title={title}>
       {isLoading ? (
-        <Text style={[typography.body, { color: colors.textMuted }]}>Loading thread...</Text>
+        <Text style={[typography.body, { color: colors.textMuted }]}>
+          Loading thread...
+        </Text>
       ) : thread?.messages?.length ? (
         <ScrollView
           style={[
@@ -104,9 +103,13 @@ export default function ThreadPanel({
               <Text style={[styles.messageMeta, { color: colors.textMuted }]}>
                 {item.isSystemGenerated
                   ? "SYSTEM"
-                  : item.senderUser?.name || item.senderRole || "Unknown"}
+                  : `${item.senderUser?.name || "Staff"} • ${item.senderRole || ""}`}
               </Text>
-              <Text style={[typography.body, { color: colors.text }]}>{item.body}</Text>
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                {item.body}
+              </Text>
+
               <Text style={[styles.messageMeta, { color: colors.textMuted }]}>
                 {new Date(item.createdAt).toLocaleString()}
               </Text>
@@ -116,13 +119,13 @@ export default function ThreadPanel({
       ) : (
         <EmptyStateCard
           title="No Messages Yet"
-          message="This thread has no messages yet."
+          message="No coordination messages have been sent for this request."
           icon="chatbubbles-outline"
         />
       )}
 
       <FormInput
-        label="New Message"
+        label="Reply"
         value={message}
         onChangeText={setMessage}
         placeholder="Type a coordination message..."
@@ -130,7 +133,7 @@ export default function ThreadPanel({
       />
 
       <AppButton
-        title={isSending ? "Sending..." : "Send Message"}
+        title={isSending ? "Sending..." : "Send Reply"}
         onPress={handleSend}
         disabled={isSending}
       />

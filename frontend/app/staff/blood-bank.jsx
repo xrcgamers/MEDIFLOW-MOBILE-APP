@@ -17,6 +17,7 @@ import StaffNavBar from "../../src/components/StaffNavBar";
 import ThemeModeToggle from "../../src/components/ThemeModeToggle";
 import StaffAccountSection from "../../src/components/StaffAccountSection";
 import RoleGuard from "../../src/components/RoleGuard";
+import ThreadPanel from "../../src/components/ThreadPanel";
 import { useAuth } from "../../src/context/AuthContext";
 import { useAppTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
@@ -26,6 +27,7 @@ import {
   getResourceItemsService,
   allocateResourceToRequestService,
 } from "../../src/services/resourceInventoryService";
+import { getResourceRequestThreadUiService } from "../../src/services/communicationService";
 
 function getStatusType(status) {
   switch (status) {
@@ -103,7 +105,7 @@ export default function BloodBankScreen() {
   }, [isAuthLoading]);
 
   const availableItems = useMemo(
-    () => items.filter((item) => ["AVAILABLE", "LOW"].includes(item.status)),
+    () => items.filter((item) => ["AVAILABLE", "LOW", "CRITICAL"].includes(item.status)),
     [items]
   );
 
@@ -237,21 +239,15 @@ export default function BloodBankScreen() {
     <RoleGuard allowedRoles={["BLOOD_BANK_STAFF"]}>
       <>
         <ScrollView
-          contentContainerStyle={[
-            styles.container,
-            { backgroundColor: colors.background },
-          ]}
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={() => loadData(true)}
-            />
+            <RefreshControl refreshing={isRefreshing} onRefresh={() => loadData(true)} />
           }
         >
           <PageHeader
             eyebrow="Blood Bank"
             title="Blood Bank Dashboard"
-            subtitle="Allocate blood stock from specific stock entries."
+            subtitle="Allocate blood stock and coordinate with triage nurses."
             icon="water-outline"
           />
 
@@ -263,9 +259,7 @@ export default function BloodBankScreen() {
 
           <FormSection title="Overview">
             {isLoading ? (
-              <Text style={[typography.body, { color: colors.textMuted }]}>
-                Loading...
-              </Text>
+              <Text style={[typography.body, { color: colors.textMuted }]}>Loading...</Text>
             ) : (
               <View style={styles.summaryWrap}>
                 <SummaryCard label="Pending" value={summary.pending} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
@@ -306,9 +300,8 @@ export default function BloodBankScreen() {
                   >
                     <View style={styles.headerRow}>
                       <Text style={[styles.cardTitle, { color: colors.text }]}>
-                        {request.patient?.patientCode || "Unknown Patient"}
+                        {request.patient?.fullName || request.patient?.patientCode || "Unknown Patient"}
                       </Text>
-
                       <StatusBadge
                         label={request.requestStatus}
                         type={getRequestType(request.requestStatus)}
@@ -352,10 +345,7 @@ export default function BloodBankScreen() {
                           label="Select Blood Stock Entry"
                           selectedValue={selectedItems[request.id] || ""}
                           onValueChange={(value) =>
-                            setSelectedItems((prev) => ({
-                              ...prev,
-                              [request.id]: value,
-                            }))
+                            setSelectedItems((prev) => ({ ...prev, [request.id]: value }))
                           }
                           options={options}
                           placeholder="Choose stock entry"
@@ -365,21 +355,14 @@ export default function BloodBankScreen() {
                           label="Allocation Quantity"
                           value={allocationQty[request.id] || ""}
                           onChangeText={(value) =>
-                            setAllocationQty((prev) => ({
-                              ...prev,
-                              [request.id]: value,
-                            }))
+                            setAllocationQty((prev) => ({ ...prev, [request.id]: value }))
                           }
                           keyboardType="numeric"
                           placeholder="e.g. 2"
                         />
 
                         <AppButton
-                          title={
-                            isUpdatingId === request.id
-                              ? "Allocating..."
-                              : "Allocate Blood"
-                          }
+                          title={isUpdatingId === request.id ? "Allocating..." : "Allocate Blood"}
                           onPress={() => handleAllocate(request)}
                           disabled={isUpdatingId === request.id}
                         />
@@ -388,11 +371,7 @@ export default function BloodBankScreen() {
                           request.requestStatus
                         ) ? (
                           <AppButton
-                            title={
-                              isUpdatingId === request.id
-                                ? "Completing..."
-                                : "Mark Completed"
-                            }
+                            title={isUpdatingId === request.id ? "Completing..." : "Mark Completed"}
                             onPress={() => handleComplete(request)}
                             disabled={isUpdatingId === request.id}
                             variant="secondary"
@@ -403,27 +382,26 @@ export default function BloodBankScreen() {
                           label="Rejection Reason"
                           value={rejectionReasons[request.id] || ""}
                           onChangeText={(value) =>
-                            setRejectionReasons((prev) => ({
-                              ...prev,
-                              [request.id]: value,
-                            }))
+                            setRejectionReasons((prev) => ({ ...prev, [request.id]: value }))
                           }
                           placeholder="Enter reason if unable to process"
                           multiline
                         />
 
                         <AppButton
-                          title={
-                            isUpdatingId === request.id
-                              ? "Rejecting..."
-                              : "Reject Request"
-                          }
+                          title={isUpdatingId === request.id ? "Rejecting..." : "Reject Request"}
                           onPress={() => handleReject(request)}
                           disabled={isUpdatingId === request.id}
                           variant="secondary"
                         />
                       </>
                     ) : null}
+
+                    <ThreadPanel
+                      title="Resource Request Communication"
+                      loadKey={request.id}
+                      loadThread={() => getResourceRequestThreadUiService(request.id)}
+                    />
                   </View>
                 );
               })
@@ -456,11 +434,7 @@ export default function BloodBankScreen() {
                     <Text style={[styles.cardTitle, { color: colors.text }]}>
                       {item.subType || item.label}
                     </Text>
-
-                    <StatusBadge
-                      label={item.status}
-                      type={getStatusType(item.status)}
-                    />
+                    <StatusBadge label={item.status} type={getStatusType(item.status)} />
                   </View>
 
                   <Text style={[typography.body, { color: colors.text }]}>
@@ -515,45 +489,17 @@ function SummaryCard({ label, value, colors, typography, radius, spacing, shadow
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    paddingBottom: 110,
-    flexGrow: 1,
-  },
-  summaryWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  summaryCard: {
-    borderWidth: 1,
-    minWidth: 150,
-  },
-  summaryValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  card: {
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  allocationBox: {
-    marginTop: 10,
-    marginBottom: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-  },
+  container: { padding: 24, paddingBottom: 110, flexGrow: 1 },
+  summaryWrap: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  summaryCard: { borderWidth: 1, minWidth: 150 },
+  summaryValue: { fontSize: 22, fontWeight: "800", marginTop: 6 },
+  card: { borderWidth: 1, marginBottom: 12 },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
+  cardTitle: { fontSize: 16, fontWeight: "800", flex: 1 },
+  allocationBox: { marginVertical: 10, gap: 4 },
 });
