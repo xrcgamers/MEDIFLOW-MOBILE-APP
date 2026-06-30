@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { ScrollView, StyleSheet, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import PageHeader from "../../src/components/PageHeader";
 import FormSection from "../../src/components/FormSection";
@@ -22,6 +23,7 @@ export default function LoginScreen() {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!form.identifier.trim() || !form.password) {
@@ -98,7 +100,19 @@ export default function LoginScreen() {
             }))
           }
           placeholder="Enter password"
-          secureTextEntry
+          secureTextEntry={!showPassword}
+          rightElement={
+            <Pressable
+              onPress={() => setShowPassword((prev) => !prev)}
+              style={styles.eyeButton}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={22}
+                color={colors.textMuted}
+              />
+            </Pressable>
+          }
         />
 
         <AppButton
@@ -116,5 +130,8 @@ const styles = StyleSheet.create({
   container: {
     padding: 24,
     flexGrow: 1,
+  },
+  eyeButton: {
+    padding: 8,
   },
 });

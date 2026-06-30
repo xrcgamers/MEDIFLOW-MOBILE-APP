@@ -24,6 +24,8 @@ import { getIncidentsService } from "../../src/services/staffIncidentService";
 import RoleGuard from "../../src/components/RoleGuard";
 import AdminReturnButton from "../../src/components/AdminReturnButton";
 
+const AUTO_REFRESH_MS = 15000;
+
 const STATUS_OPTIONS = [
   { label: "All Statuses", value: "" },
   { label: "Received", value: "RECEIVED" },
@@ -46,7 +48,6 @@ function getStatusType(status) {
     case "REJECTED":
     case "CANCELLED":
       return "danger";
-    case "RECEIVED":
     default:
       return "info";
   }
@@ -60,7 +61,6 @@ function getPriorityType(level) {
       return "warning";
     case "MODERATE":
       return "info";
-    case "LOW":
     default:
       return "neutral";
   }
@@ -97,9 +97,10 @@ export default function IncidentsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadIncidents = async (refresh = false) => {
+  const loadIncidents = async (refresh = false, silent = false) => {
     try {
-      refresh ? setIsRefreshing(true) : setIsLoading(true);
+      if (refresh) setIsRefreshing(true);
+      else if (!silent) setIsLoading(true);
 
       const data = await getIncidentsService({
         ...(statusFilter ? { status: statusFilter } : {}),
@@ -107,11 +108,13 @@ export default function IncidentsScreen() {
 
       setIncidents(data || []);
     } catch (error) {
-      showToast({
-        title: "Load Failed",
-        message: error.message || "Unable to load incidents.",
-        type: "error",
-      });
+      if (!silent) {
+        showToast({
+          title: "Load Failed",
+          message: error.message || "Unable to load incidents.",
+          type: "error",
+        });
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -120,6 +123,14 @@ export default function IncidentsScreen() {
 
   useEffect(() => {
     loadIncidents();
+  }, [statusFilter]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadIncidents(false, true);
+    }, AUTO_REFRESH_MS);
+
+    return () => clearInterval(timer);
   }, [statusFilter]);
 
   const filteredIncidents = useMemo(() => {
@@ -149,22 +160,23 @@ export default function IncidentsScreen() {
     });
   }, [incidents, search]);
 
-  const summary = useMemo(() => {
-    return {
+  const summary = useMemo(
+    () => ({
       total: filteredIncidents.length,
-      criticalAi: filteredIncidents.filter(
-        (item) => item.aiAssessment?.priorityLevel === "CRITICAL"
+      critical: filteredIncidents.filter(
+        (item) =>
+          item.aiAssessment?.priorityLevel === "CRITICAL" ||
+          item.queuePriority?.finalPriorityLevel === "CRITICAL"
       ).length,
-      partialPressure: filteredIncidents.filter((item) => {
-        const requestSummary = summarizeIncidentRequests(item);
-        return requestSummary.partial > 0;
-      }).length,
-      reservedPressure: filteredIncidents.filter((item) => {
-        const requestSummary = summarizeIncidentRequests(item);
-        return requestSummary.reserved > 0;
-      }).length,
-    };
-  }, [filteredIncidents]);
+      partialPressure: filteredIncidents.filter(
+        (item) => summarizeIncidentRequests(item).partial > 0
+      ).length,
+      reservedPressure: filteredIncidents.filter(
+        (item) => summarizeIncidentRequests(item).reserved > 0
+      ).length,
+    }),
+    [filteredIncidents]
+  );
 
   const sortedIncidents = useMemo(() => {
     return [...filteredIncidents].sort((a, b) => {
@@ -188,186 +200,185 @@ export default function IncidentsScreen() {
   };
 
   return (
-    <RoleGuard allowedRoles={["EMERGENCY_NURSE"]}>
-    <>
-      <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={() => loadIncidents(true)} />
-        }
-      >
-        <PageHeader
-          eyebrow="Clinical Operations"
-          title="Incident Queue"
-          subtitle="Review incidents by context, AI priority, and operational pressure."
-          icon="list-outline"
-        />
-
-        <AdminReturnButton />
-
-        <FormSection title="Appearance">
-          <ThemeModeToggle />
-        </FormSection>
-
-        <FormSection title="Account Details">
-          <Text style={[typography.body, { color: colors.text }]}>Name: {user?.name}</Text>
-          <Text style={[typography.body, { color: colors.text }]}>Account Type: {user?.role}</Text>
-          <Text style={[typography.body, { color: colors.text }]}>Email: {user?.email}</Text>
-          <AppButton title="Logout" onPress={handleLogout} variant="secondary" />
-        </FormSection>
-
-        <FormSection title="Queue Overview">
-          {isLoading ? (
-            <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
-          ) : (
-            <View style={styles.summaryWrap}>
-              <SummaryCard label="Visible Incidents" value={summary.total} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-              <SummaryCard label="Critical AI" value={summary.criticalAi} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-              <SummaryCard label="Partial Pressure" value={summary.partialPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-              <SummaryCard label="Reserved Pressure" value={summary.reservedPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            </View>
-          )}
-        </FormSection>
-
-        <FormSection title="Filters">
-          <FormInput
-            label="Search Queue"
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search by code, type, subtype, location, priority..."
+    <RoleGuard allowedRoles={["ADMIN", "EMERGENCY_NURSE"]}>
+      <>
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={() => loadIncidents(true)} />
+          }
+        >
+          <PageHeader
+            eyebrow="Clinical Operations"
+            title="Incident Queue"
+            subtitle="Review incidents by status, response priority, and resource pressure."
+            icon="list-outline"
           />
 
-          <FormSelect
-            label="Status Filter"
-            selectedValue={statusFilter}
-            onValueChange={setStatusFilter}
-            options={STATUS_OPTIONS}
-            placeholder="Select status"
-          />
-        </FormSection>
+          <AdminReturnButton />
 
-        <FormSection title="Incidents">
-          {isLoading ? (
-            <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
-          ) : sortedIncidents.length ? (
-            sortedIncidents.map((incident) => {
-              const patientCount = (incident.patients || []).length;
-              const requestSummary = summarizeIncidentRequests(incident);
+          <FormSection title="Appearance">
+            <ThemeModeToggle />
+          </FormSection>
 
-              return (
-                <Pressable
-                  key={incident.id}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/staff/incident-details",
-                      params: { id: incident.id },
-                    })
-                  }
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderRadius: radius.lg,
-                      padding: spacing.md,
-                    },
-                    shadow,
-                  ]}
-                >
-                  <View style={styles.headerRow}>
-                    <Text style={[styles.cardTitle, { color: colors.text }]}>
-                      {incident.trackingCode}
-                    </Text>
-                    <StatusBadge
-                      label={incident.status}
-                      type={getStatusType(incident.status)}
-                    />
-                  </View>
+          <FormSection title="Account Details">
+            <Text style={[typography.body, { color: colors.text }]}>Name: {user?.name}</Text>
+            <Text style={[typography.body, { color: colors.text }]}>Account Type: {user?.role}</Text>
+            <Text style={[typography.body, { color: colors.text }]}>Email: {user?.email}</Text>
+            <AppButton title="Logout" onPress={handleLogout} variant="secondary" />
+          </FormSection>
 
-                  <View style={styles.badgeRow}>
-                    {incident.aiAssessment?.priorityLevel ? (
-                      <StatusBadge
-                        label={`AI ${incident.aiAssessment.priorityLevel}`}
-                        type={getPriorityType(incident.aiAssessment.priorityLevel)}
-                      />
-                    ) : null}
+          <FormSection title="Queue Overview">
+            {isLoading ? (
+              <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
+            ) : (
+              <>
+                <View style={styles.summaryWrap}>
+                  <SummaryCard label="Visible Incidents" value={summary.total} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+                  <SummaryCard label="Critical" value={summary.critical} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+                  <SummaryCard label="Partial Pressure" value={summary.partialPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+                  <SummaryCard label="Reserved Pressure" value={summary.reservedPressure} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
+                </View>
 
-                    {incident.queuePriority?.finalPriorityLevel ? (
-                      <StatusBadge
-                        label={`QUEUE ${incident.queuePriority.finalPriorityLevel}`}
-                        type={getPriorityType(incident.queuePriority.finalPriorityLevel)}
-                      />
-                    ) : null}
+                <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+                  Auto-refreshes every {AUTO_REFRESH_MS / 1000} seconds.
+                </Text>
+              </>
+            )}
+          </FormSection>
 
-                    {incident.subIncidentType ? (
-                      <StatusBadge label="Subtype Context" type="info" />
-                    ) : null}
-                  </View>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Context: {getIncidentContextLabel(incident)}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Location:{" "}
-                    {incident.resolvedLocationText ||
-                      incident.manualLocationText ||
-                      incident.autoLocationText ||
-                      "Unknown"}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Estimated Patients: {incident.estimatedVictimCount ?? 0}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Linked Patients: {patientCount}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Queue Score: {incident.queuePriority?.finalPriorityScore ?? "Not set"}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.text }]}>
-                    Manual Rank: {incident.queuePriority?.manualOverrideRank ?? "None"}
-                  </Text>
-
-                  <View style={{ marginTop: 8 }}>
-                    <Text style={[typography.body, { color: colors.textMuted }]}>
-                      Resource Pressure:
-                    </Text>
-                    <Text style={[typography.body, { color: colors.text }]}>
-                      Total Requests: {requestSummary.total}
-                    </Text>
-                    <Text style={[typography.body, { color: colors.text }]}>
-                      Partial Allocations: {requestSummary.partial}
-                    </Text>
-                    <Text style={[typography.body, { color: colors.text }]}>
-                      Reserved: {requestSummary.reserved}
-                    </Text>
-                    <Text style={[typography.body, { color: colors.text }]}>
-                      Completed: {requestSummary.completed}
-                    </Text>
-                  </View>
-
-                  <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
-                    Created: {new Date(incident.createdAt).toLocaleString()}
-                  </Text>
-                </Pressable>
-              );
-            })
-          ) : (
-            <EmptyStateCard
-              title="No Incidents Found"
-              message="No incidents match the current search or filter."
-              icon="list-outline"
+          <FormSection title="Filters">
+            <FormInput
+              label="Search Queue"
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search by code, type, subtype, location, priority..."
             />
-          )}
-        </FormSection>
-      </ScrollView>
 
-      <StaffNavBar activeRoute="/staff/incidents" />
-    </>
+            <FormSelect
+              label="Status Filter"
+              selectedValue={statusFilter}
+              onValueChange={setStatusFilter}
+              options={STATUS_OPTIONS}
+              placeholder="Select status"
+            />
+          </FormSection>
+
+          <FormSection title="Incidents">
+            {isLoading ? (
+              <Text style={[typography.body, { color: colors.textMuted }]}>Loading incidents...</Text>
+            ) : sortedIncidents.length ? (
+              sortedIncidents.map((incident) => {
+                const patientCount = (incident.patients || []).length;
+                const requestSummary = summarizeIncidentRequests(incident);
+
+                return (
+                  <Pressable
+                    key={incident.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/staff/incident-details",
+                        params: { id: incident.id },
+                      })
+                    }
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        borderRadius: radius.lg,
+                        padding: spacing.md,
+                      },
+                      shadow,
+                    ]}
+                  >
+                    <View style={styles.headerRow}>
+                      <Text style={[styles.cardTitle, { color: colors.text }]}>
+                        {incident.trackingCode}
+                      </Text>
+                      <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
+                    </View>
+
+                    <View style={styles.badgeRow}>
+                      {incident.aiAssessment?.priorityLevel ? (
+                        <StatusBadge
+                          label={`INCIDENT ${incident.aiAssessment.priorityLevel}`}
+                          type={getPriorityType(incident.aiAssessment.priorityLevel)}
+                        />
+                      ) : null}
+
+                      {incident.queuePriority?.finalPriorityLevel ? (
+                        <StatusBadge
+                          label={`QUEUE ${incident.queuePriority.finalPriorityLevel}`}
+                          type={getPriorityType(incident.queuePriority.finalPriorityLevel)}
+                        />
+                      ) : null}
+                    </View>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Context: {getIncidentContextLabel(incident)}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Location:{" "}
+                      {incident.resolvedLocationText ||
+                        incident.manualLocationText ||
+                        incident.autoLocationText ||
+                        "Unknown"}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Estimated Patients: {incident.estimatedVictimCount ?? 0}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Linked Patients: {patientCount}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Queue Score: {incident.queuePriority?.finalPriorityScore ?? "Not set"}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Manual Rank: {incident.queuePriority?.manualOverrideRank ?? "None"}
+                    </Text>
+
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={[typography.body, { color: colors.textMuted }]}>
+                        Resource Pressure:
+                      </Text>
+                      <Text style={[typography.body, { color: colors.text }]}>
+                        Total Requests: {requestSummary.total}
+                      </Text>
+                      <Text style={[typography.body, { color: colors.text }]}>
+                        Partial Allocations: {requestSummary.partial}
+                      </Text>
+                      <Text style={[typography.body, { color: colors.text }]}>
+                        Reserved: {requestSummary.reserved}
+                      </Text>
+                      <Text style={[typography.body, { color: colors.text }]}>
+                        Completed: {requestSummary.completed}
+                      </Text>
+                    </View>
+
+                    <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
+                      Created: {new Date(incident.createdAt).toLocaleString()}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <EmptyStateCard
+                title="No Incidents Found"
+                message="No incidents match the current search or filter."
+                icon="list-outline"
+              />
+            )}
+          </FormSection>
+        </ScrollView>
+
+        <StaffNavBar activeRoute="/staff/incidents" />
+      </>
     </RoleGuard>
   );
 }
@@ -419,13 +430,13 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 8,
     marginBottom: 8,
   },
   cardTitle: {

@@ -10,6 +10,37 @@ export async function getIncidentByIdService(incidentId) {
   return response.data.data;
 }
 
+export async function analyzeIncidentPriorityService(incidentId) {
+  const response = await apiClient.post(
+    `/staff/incidents/${incidentId}/analyze-priority`
+  );
+  return response.data.data;
+}
+
+export async function updateIncidentStatusService(incidentId, payload) {
+  const response = await apiClient.patch(
+    `/staff/incidents/${incidentId}/status`,
+    payload
+  );
+  return response.data.data;
+}
+
+export async function addPatientToIncidentService(incidentId, payload = {}) {
+  const response = await apiClient.post(
+    `/staff/incidents/${incidentId}/patients`,
+    payload
+  );
+  return response.data.data;
+}
+
+export async function reorderIncidentQueueService(incidentId, payload) {
+  const response = await apiClient.post(
+    `/staff/incidents/${incidentId}/reorder-queue`,
+    payload
+  );
+  return response.data.data;
+}
+
 export async function getPatientByIdService(patientId) {
   const response = await apiClient.get(`/staff/patients/${patientId}`);
   return response.data.data;
@@ -44,15 +75,15 @@ export async function createPatientTriageService(patientId, payload) {
   return response.data.data;
 }
 
-export async function getResourceCategoriesService() {
-  const response = await apiClient.get("/resources/categories");
-  return response.data.data;
-}
-
 export async function createPatientResourceRequestService(patientId, payload) {
   const response = await apiClient.post(
     `/staff/patients/${patientId}/resource-requests`,
     payload
   );
+  return response.data.data;
+}
+
+export async function getResourceCategoriesService() {
+  const response = await apiClient.get("/resources/categories");
   return response.data.data;
 }

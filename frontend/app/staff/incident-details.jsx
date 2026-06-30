@@ -8,9 +8,10 @@ import {
   RefreshControl,
   Pressable,
   Image,
+  Linking,
 } from "react-native";
-import BackNavButton from "../../src/components/BackNavButton";
 import PageHeader from "../../src/components/PageHeader";
+import BackNavButton from "../../src/components/BackNavButton";
 import FormSection from "../../src/components/FormSection";
 import FormInput from "../../src/components/FormInput";
 import FormSelect from "../../src/components/FormSelect";
@@ -18,34 +19,65 @@ import AppButton from "../../src/components/AppButton";
 import EmptyStateCard from "../../src/components/EmptyStateCard";
 import StatusBadge from "../../src/components/StatusBadge";
 import StaffNavBar from "../../src/components/StaffNavBar";
-import ThreadPanel from "../../src/components/ThreadPanel";
-import {
-  getIncidentByIdService,
-  updateIncidentStatusService,
-  analyzeIncidentPriorityService,
-  reorderIncidentQueueService,
-  addPatientToIncidentService,
-} from "../../src/services/staffIncidentService";
-import { getIncidentThreadUiService } from "../../src/services/communicationService";
+import RoleGuard from "../../src/components/RoleGuard";
+import AdminReturnButton from "../../src/components/AdminReturnButton";
 import { useAppTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { resolveMediaUrl } from "../../src/utils/mediaUrl";
-import AdminReturnButton from "../../src/components/AdminReturnButton";
+import {
+  getIncidentByIdService,
+  analyzeIncidentPriorityService,
+  updateIncidentStatusService,
+  addPatientToIncidentService,
+  reorderIncidentQueueService,
+} from "../../src/services/staffIncidentService";
 
 const STATUS_OPTIONS = [
   { label: "Received", value: "RECEIVED" },
   { label: "Under Review", value: "UNDER_REVIEW" },
   { label: "Accepted", value: "ACCEPTED" },
   { label: "Response In Progress", value: "RESPONSE_IN_PROGRESS" },
+  { label: "Closed", value: "CLOSED" },
   { label: "Rejected", value: "REJECTED" },
   { label: "Cancelled", value: "CANCELLED" },
-  { label: "Closed", value: "CLOSED" },
 ];
 
-const QUEUE_OPTIONS = Array.from({ length: 10 }).map((_, index) => ({
-  label: String(index + 1),
-  value: String(index + 1),
-}));
+const QUEUE_OVERRIDE_OPTIONS = [
+  { label: "Normal", value: "NORMAL" },
+  { label: "High Priority", value: "HIGH" },
+  { label: "Critical Priority", value: "CRITICAL" },
+  { label: "Hold / Deprioritize", value: "HOLD" },
+];
+
+function queueLevelToRank(level) {
+  switch (level) {
+    case "CRITICAL":
+      return 1;
+    case "HIGH":
+      return 3;
+    case "HOLD":
+      return 10;
+    case "NORMAL":
+    default:
+      return 5;
+  }
+}
+
+function getStatusType(status) {
+  switch (status) {
+    case "ACCEPTED":
+    case "CLOSED":
+      return "success";
+    case "REJECTED":
+    case "CANCELLED":
+      return "danger";
+    case "UNDER_REVIEW":
+    case "RESPONSE_IN_PROGRESS":
+      return "warning";
+    default:
+      return "info";
+  }
+}
 
 function getPriorityType(level) {
   switch (level) {
@@ -57,22 +89,6 @@ function getPriorityType(level) {
       return "info";
     default:
       return "neutral";
-  }
-}
-
-function getStatusType(status) {
-  switch (status) {
-    case "ACCEPTED":
-    case "CLOSED":
-      return "success";
-    case "UNDER_REVIEW":
-    case "RESPONSE_IN_PROGRESS":
-      return "warning";
-    case "REJECTED":
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "info";
   }
 }
 
@@ -93,21 +109,6 @@ function getRequestType(status) {
   }
 }
 
-function getCategoryType(name) {
-  switch (name) {
-    case "BLOOD":
-      return "danger";
-    case "IMAGING":
-      return "info";
-    case "THEATRE":
-      return "warning";
-    case "BED":
-      return "success";
-    default:
-      return "neutral";
-  }
-}
-
 function getIncidentContextLabel(incident) {
   if (!incident) return "No incident context";
   if (incident.subIncidentType) {
@@ -116,14 +117,15 @@ function getIncidentContextLabel(incident) {
   return incident.incidentType || "Incident context available";
 }
 
-function summarizeRequests(patients = []) {
+function summarizeRequests(incident) {
+  const patients = incident?.patients || [];
   const requests = patients.flatMap((patient) => patient.resourceRequests || []);
 
   return {
     total: requests.length,
-    partial: requests.filter((r) => r.requestStatus === "PARTIALLY_ALLOCATED").length,
-    reserved: requests.filter((r) => r.requestStatus === "RESERVED").length,
-    completed: requests.filter((r) => r.requestStatus === "COMPLETED").length,
+    partial: requests.filter((item) => item.requestStatus === "PARTIALLY_ALLOCATED").length,
+    reserved: requests.filter((item) => item.requestStatus === "RESERVED").length,
+    completed: requests.filter((item) => item.requestStatus === "COMPLETED").length,
   };
 }
 
@@ -135,6 +137,10 @@ export default function IncidentDetailsScreen() {
   const [incident, setIncident] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isAddingPatient, setIsAddingPatient] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   const [statusForm, setStatusForm] = useState({
     status: "",
@@ -143,17 +149,16 @@ export default function IncidentDetailsScreen() {
   });
 
   const [queueForm, setQueueForm] = useState({
-    manualOverrideRank: "",
-    manualOverrideReason: "",
+    overrideLevel: "NORMAL",
+    overrideReason: "",
+    expectedAction: "",
   });
 
-  const [addPatientNote, setAddPatientNote] = useState("");
-  const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
-  const [isSubmittingQueue, setIsSubmittingQueue] = useState(false);
-  const [isAddingPatient, setIsAddingPatient] = useState(false);
-  const [isRunningAi, setIsRunningAi] = useState(false);
+  const [patientNote, setPatientNote] = useState("");
 
   const loadIncident = async (refresh = false) => {
+    if (!id) return;
+
     try {
       refresh ? setIsRefreshing(true) : setIsLoading(true);
 
@@ -162,11 +167,16 @@ export default function IncidentDetailsScreen() {
 
       setStatusForm((prev) => ({
         ...prev,
-        status: data.status || "",
+        status: data?.status || "",
+      }));
+
+      setQueueForm((prev) => ({
+        ...prev,
+        overrideReason: data?.queuePriority?.manualOverrideReason || "",
       }));
     } catch (error) {
       showToast({
-        title: "Incident Load Failed",
+        title: "Load Failed",
         message: error.message || "Unable to load incident details.",
         type: "error",
       });
@@ -177,70 +187,130 @@ export default function IncidentDetailsScreen() {
   };
 
   useEffect(() => {
-    if (id) loadIncident();
+    loadIncident();
   }, [id]);
 
-  const activePatients = useMemo(
-    () => (incident?.patients || []).filter((item) => !item.isExcluded),
-    [incident]
-  );
+  const requestSummary = useMemo(() => summarizeRequests(incident), [incident]);
 
-  const requestSummary = useMemo(
-    () => summarizeRequests(activePatients),
-    [activePatients]
-  );
+  const handleOpenGoogleMaps = async () => {
+    if (!incident?.latitude || !incident?.longitude) {
+      showToast({
+        title: "Location Unavailable",
+        message: "This incident does not have usable coordinates.",
+        type: "warning",
+      });
+      return;
+    }
 
-  const handleRunAi = async () => {
+    const url = `https://www.google.com/maps?q=${incident.latitude},${incident.longitude}`;
+
     try {
-      setIsRunningAi(true);
+      await Linking.openURL(url);
+    } catch {
+      showToast({
+        title: "Map Failed",
+        message: "Unable to open Google Maps.",
+        type: "error",
+      });
+    }
+  };
+
+  const handleAnalyzeIncident = async () => {
+    try {
+      setIsAnalyzing(true);
+
       await analyzeIncidentPriorityService(id);
-      await loadIncident(true);
 
       showToast({
-        title: "AI Analysis Complete",
-        message: "Incident priority was refreshed successfully.",
+        title: "Incident Assessment Complete",
+        message: "Incident response assessment was refreshed.",
         type: "success",
       });
+
+      await loadIncident(true);
     } catch (error) {
       showToast({
-        title: "AI Analysis Failed",
-        message: error.message || "Unable to analyze incident.",
+        title: "Incident Assessment Failed",
+        message: error.message || "Unable to assess incident.",
         type: "error",
       });
     } finally {
-      setIsRunningAi(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleQueueOverride = async () => {
+    if (!queueForm.overrideReason.trim()) {
+      showToast({
+        title: "Reason Required",
+        message: "Enter a reason for the queue override.",
+        type: "warning",
+      });
+      return;
+    }
+
+    try {
+      setIsReordering(true);
+
+      const reason = [
+        `Override Level: ${queueForm.overrideLevel}`,
+        `Reason: ${queueForm.overrideReason.trim()}`,
+        queueForm.expectedAction.trim()
+          ? `Expected Action: ${queueForm.expectedAction.trim()}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await reorderIncidentQueueService(id, {
+        manualOverrideRank: queueLevelToRank(queueForm.overrideLevel),
+        manualOverrideReason: reason,
+      });
+
+      showToast({
+        title: "Queue Updated",
+        message: "Incident queue override was applied.",
+        type: "success",
+      });
+
+      await loadIncident(true);
+    } catch (error) {
+      showToast({
+        title: "Queue Override Failed",
+        message: error.message || "Unable to update queue priority.",
+        type: "error",
+      });
+    } finally {
+      setIsReordering(false);
     }
   };
 
   const handleUpdateStatus = async () => {
     if (!statusForm.status) {
       showToast({
-        title: "Missing Status",
-        message: "Select an incident status first.",
-        type: "warning",
-      });
-      return;
-    }
-
-    if (
-      ["REJECTED", "CANCELLED"].includes(statusForm.status) &&
-      !statusForm.rejectionReason.trim()
-    ) {
-      showToast({
-        title: "Missing Reason",
-        message: "Enter a rejection or cancellation reason.",
+        title: "Status Required",
+        message: "Select an incident status.",
         type: "warning",
       });
       return;
     }
 
     try {
-      setIsSubmittingStatus(true);
+      setIsUpdatingStatus(true);
 
       await updateIncidentStatusService(id, {
         status: statusForm.status,
         note: statusForm.note.trim(),
-        rejectionReason: statusForm.rejectionReason.trim() || null,
+        rejectionReason:
+          statusForm.status === "REJECTED" || statusForm.status === "CANCELLED"
+            ? statusForm.rejectionReason.trim() || statusForm.note.trim()
+            : null,
+      });
+
+      showToast({
+        title: "Status Updated",
+        message: "Incident status was updated successfully.",
+        type: "success",
       });
 
       setStatusForm((prev) => ({
@@ -249,62 +319,15 @@ export default function IncidentDetailsScreen() {
         rejectionReason: "",
       }));
 
-      showToast({
-        title: "Status Updated",
-        message: "Incident status updated successfully.",
-        type: "success",
-      });
-
       await loadIncident(true);
     } catch (error) {
       showToast({
         title: "Status Update Failed",
-        message: error.message || "Unable to update incident.",
+        message: error.message || "Unable to update incident status.",
         type: "error",
       });
     } finally {
-      setIsSubmittingStatus(false);
-    }
-  };
-
-  const handleQueueOverride = async () => {
-    if (!queueForm.manualOverrideRank || !queueForm.manualOverrideReason.trim()) {
-      showToast({
-        title: "Missing Queue Data",
-        message: "Select a rank and enter a reason.",
-        type: "warning",
-      });
-      return;
-    }
-
-    try {
-      setIsSubmittingQueue(true);
-
-      await reorderIncidentQueueService(id, {
-        manualOverrideRank: Number(queueForm.manualOverrideRank),
-        manualOverrideReason: queueForm.manualOverrideReason.trim(),
-      });
-
-      setQueueForm({
-        manualOverrideRank: "",
-        manualOverrideReason: "",
-      });
-
-      showToast({
-        title: "Queue Updated",
-        message: "Manual queue override applied.",
-        type: "success",
-      });
-
-      await loadIncident(true);
-    } catch (error) {
-      showToast({
-        title: "Queue Override Failed",
-        message: error.message || "Unable to override queue.",
-        type: "error",
-      });
-    } finally {
-      setIsSubmittingQueue(false);
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -313,17 +336,16 @@ export default function IncidentDetailsScreen() {
       setIsAddingPatient(true);
 
       await addPatientToIncidentService(id, {
-        note: addPatientNote.trim(),
+        note: patientNote.trim(),
       });
-
-      setAddPatientNote("");
 
       showToast({
         title: "Patient Added",
-        message: "A new patient was added to this incident.",
+        message: "A patient record was added to this incident.",
         type: "success",
       });
 
+      setPatientNote("");
       await loadIncident(true);
     } catch (error) {
       showToast({
@@ -340,13 +362,16 @@ export default function IncidentDetailsScreen() {
     return (
       <>
         <ScrollView
-          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
         >
           <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
           <PageHeader
             eyebrow="Incident Coordination"
             title="Incident Details"
-            subtitle="Loading incident details..."
+            subtitle="Loading incident..."
             icon="document-text-outline"
           />
         </ScrollView>
@@ -359,18 +384,15 @@ export default function IncidentDetailsScreen() {
     return (
       <>
         <ScrollView
-          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
         >
           <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
-          <PageHeader
-            eyebrow="Incident Coordination"
-            title="Incident Details"
-            subtitle="Incident data is unavailable."
-            icon="document-text-outline"
-          />
           <EmptyStateCard
             title="Incident Not Found"
-            message="This incident could not be loaded."
+            message="Unable to load this incident."
             icon="document-text-outline"
             actionLabel="Retry"
             onAction={() => loadIncident(true)}
@@ -382,130 +404,32 @@ export default function IncidentDetailsScreen() {
   }
 
   return (
-    <>
-      <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => loadIncident(true)}
+    <RoleGuard allowedRoles={["ADMIN", "EMERGENCY_NURSE"]}>
+      <>
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => loadIncident(true)}
+            />
+          }
+        >
+          <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
+
+          <PageHeader
+            eyebrow="Incident Coordination"
+            title={incident.trackingCode}
+            subtitle={getIncidentContextLabel(incident)}
+            icon="document-text-outline"
           />
-        }
-      >
-        <BackNavButton label="Back to Incidents" fallbackRoute="/staff/incidents" />
 
-        <PageHeader
-          eyebrow="Incident Coordination"
-          title={incident.trackingCode}
-          subtitle={getIncidentContextLabel(incident)}
-          icon="document-text-outline"
-        />
+          <AdminReturnButton />
 
-        <FormSection title="Incident Summary">
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-              },
-              shadow,
-            ]}
-          >
-            <View style={styles.badgeRow}>
-              <StatusBadge label={incident.status} type={getStatusType(incident.status)} />
-
-              {incident.aiAssessment?.priorityLevel ? (
-                <StatusBadge
-                  label={`AI ${incident.aiAssessment.priorityLevel}`}
-                  type={getPriorityType(incident.aiAssessment.priorityLevel)}
-                />
-              ) : null}
-
-              {incident.queuePriority?.finalPriorityLevel ? (
-                <StatusBadge
-                  label={`QUEUE ${incident.queuePriority.finalPriorityLevel}`}
-                  type={getPriorityType(incident.queuePriority.finalPriorityLevel)}
-                />
-              ) : null}
-            </View>
-
-            <Text style={[typography.body, { color: colors.text }]}>
-              Incident Type: {incident.incidentType || "Unknown"}
-            </Text>
-
-            {incident.subIncidentType ? (
-              <Text style={[typography.body, { color: colors.text }]}>
-                Incident Subtype: {incident.subIncidentType}
-              </Text>
-            ) : null}
-
-            {incident.otherIncidentType ? (
-              <Text style={[typography.body, { color: colors.text }]}>
-                Other Type Detail: {incident.otherIncidentType}
-              </Text>
-            ) : null}
-
-            <Text style={[typography.body, { color: colors.text }]}>
-              Location:{" "}
-              {incident.resolvedLocationText ||
-                incident.manualLocationText ||
-                incident.autoLocationText ||
-                "Coordinates submitted"}
-            </Text>
-
-            <Text style={[typography.body, { color: colors.text }]}>
-              Coordinates: {incident.latitude ?? "N/A"}, {incident.longitude ?? "N/A"}
-            </Text>
-
-            <Text style={[typography.body, { color: colors.text }]}>
-              Estimated Patients: {incident.estimatedVictimCount ?? 0}
-            </Text>
-
-            <Text style={[typography.body, { color: colors.text }]}>
-              Reporter Phone: {incident.phoneNumber || "Not provided"}
-            </Text>
-
-            {incident.notes ? (
-              <Text style={[typography.body, { color: colors.text }]}>
-                Notes: {incident.notes}
-              </Text>
-            ) : null}
-
-            {incident.mediaAttachments?.[0]?.fileUrl ? (
-              <View style={{ marginTop: 12 }}>
-                <Text style={[typography.body, { color: colors.textMuted }]}>
-                  Incident Photo:
-                </Text>
-
-                <Image
-                  source={{
-                    uri: resolveMediaUrl(incident.mediaAttachments[0].filePath),
-                  }}
-                  style={styles.incidentImage}
-                />
-              </View>
-            ) : (
-              <Text style={[typography.body, { color: colors.textMuted, marginTop: 8 }]}>
-                No incident photo available.
-              </Text>
-            )}
-          </View>
-        </FormSection>
-
-        <FormSection title="Resource Fulfillment Overview">
-          <View style={styles.summaryWrap}>
-            <MiniCard label="Requests" value={requestSummary.total} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <MiniCard label="Partial" value={requestSummary.partial} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <MiniCard label="Reserved" value={requestSummary.reserved} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-            <MiniCard label="Completed" value={requestSummary.completed} colors={colors} typography={typography} radius={radius} spacing={spacing} shadow={shadow} />
-          </View>
-        </FormSection>
-
-        <FormSection title="AI Priority Analysis">
-          {incident.aiAssessment ? (
+          <FormSection title="Incident Summary">
             <View
               style={[
                 styles.card,
@@ -518,293 +442,416 @@ export default function IncidentDetailsScreen() {
                 shadow,
               ]}
             >
-              <StatusBadge
-                label={incident.aiAssessment.priorityLevel}
-                type={getPriorityType(incident.aiAssessment.priorityLevel)}
+              <View style={styles.badgeRow}>
+                <StatusBadge
+                  label={incident.status}
+                  type={getStatusType(incident.status)}
+                />
+              </View>
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Incident Type: {incident.incidentType}
+              </Text>
+
+              {incident.subIncidentType ? (
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Incident Subtype: {incident.subIncidentType}
+                </Text>
+              ) : null}
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Location:{" "}
+                {incident.resolvedLocationText ||
+                  incident.manualLocationText ||
+                  incident.autoLocationText ||
+                  "Coordinates submitted"}
+              </Text>
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Coordinates: {incident.latitude ?? "N/A"},{" "}
+                {incident.longitude ?? "N/A"}
+              </Text>
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Estimated Patients: {incident.estimatedVictimCount}
+              </Text>
+
+              <Text style={[typography.body, { color: colors.text }]}>
+                Reporter Phone: {incident.phoneNumber}
+              </Text>
+
+              {incident.notes ? (
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Notes: {incident.notes}
+                </Text>
+              ) : null}
+
+              <AppButton
+                title="Open Location in Google Maps"
+                onPress={handleOpenGoogleMaps}
+                variant="secondary"
               />
 
-              <Text style={[typography.body, { color: colors.text }]}>
-                Confidence: {incident.aiAssessment.confidence}%
-              </Text>
-
-              <Text style={[typography.body, { color: colors.text }]}>
-                Recommended Action: {incident.aiAssessment.recommendedNextAction}
-              </Text>
-
-              <Text style={[typography.body, { color: colors.textMuted }]}>
-                Basis: {incident.aiAssessment.analysisBasis}
-              </Text>
-
-              {incident.aiAssessment.keyRiskFactors?.length ? (
-                <View style={{ marginTop: 8 }}>
-                  <Text style={[typography.body, { color: colors.textMuted }]}>
-                    Key Risk Factors:
-                  </Text>
-                  {incident.aiAssessment.keyRiskFactors.map((factor, index) => (
-                    <Text
-                      key={`${factor}-${index}`}
-                      style={[typography.body, { color: colors.text }]}
-                    >
-                      • {factor}
-                    </Text>
-                  ))}
-                </View>
-              ) : null}
+              {incident.mediaAttachments?.length ? (
+                <Image
+                  source={{
+                    uri: resolveMediaUrl(incident.mediaAttachments[0].filePath),
+                  }}
+                  style={styles.incidentImage}
+                />
+              ) : (
+                <Text style={[typography.body, { color: colors.textMuted }]}>
+                  No incident photo available.
+                </Text>
+              )}
             </View>
-          ) : (
-            <EmptyStateCard
-              title="No AI Analysis"
-              message="Run AI analysis to refresh incident priority."
-              icon="sparkles-outline"
-            />
-          )}
+          </FormSection>
 
-          <AppButton
-            title={isRunningAi ? "Running..." : "Run AI Analysis"}
-            onPress={handleRunAi}
-            loading={isRunningAi}
-            disabled={isRunningAi}
-          />
-        </FormSection>
+          <FormSection title="Resource Fulfillment Overview">
+            <View style={styles.summaryWrap}>
+              <SummaryCard
+                label="Requests"
+                value={requestSummary.total}
+                colors={colors}
+                typography={typography}
+                radius={radius}
+                spacing={spacing}
+                shadow={shadow}
+              />
+              <SummaryCard
+                label="Partial"
+                value={requestSummary.partial}
+                colors={colors}
+                typography={typography}
+                radius={radius}
+                spacing={spacing}
+                shadow={shadow}
+              />
+              <SummaryCard
+                label="Reserved"
+                value={requestSummary.reserved}
+                colors={colors}
+                typography={typography}
+                radius={radius}
+                spacing={spacing}
+                shadow={shadow}
+              />
+              <SummaryCard
+                label="Completed"
+                value={requestSummary.completed}
+                colors={colors}
+                typography={typography}
+                radius={radius}
+                spacing={spacing}
+                shadow={shadow}
+              />
+            </View>
+          </FormSection>
 
-        <FormSection title="Queue Priority Override">
-          <Text style={[typography.body, { color: colors.textMuted }]}>
-            Final Priority Level: {incident.queuePriority?.finalPriorityLevel || "Not set"}
-          </Text>
-
-          <Text style={[typography.body, { color: colors.textMuted }]}>
-            Final Priority Score: {incident.queuePriority?.finalPriorityScore ?? "Not set"}
-          </Text>
-
-          <FormSelect
-            label="Manual Queue Rank"
-            selectedValue={queueForm.manualOverrideRank}
-            onValueChange={(value) =>
-              setQueueForm((prev) => ({
-                ...prev,
-                manualOverrideRank: value,
-              }))
-            }
-            options={QUEUE_OPTIONS}
-            placeholder="Select manual rank"
-          />
-
-          <FormInput
-            label="Override Reason"
-            value={queueForm.manualOverrideReason}
-            onChangeText={(value) =>
-              setQueueForm((prev) => ({
-                ...prev,
-                manualOverrideReason: value,
-              }))
-            }
-            placeholder="Why are you changing queue order?"
-            multiline
-          />
-
-          <AppButton
-            title={isSubmittingQueue ? "Applying..." : "Apply Queue Override"}
-            onPress={handleQueueOverride}
-            loading={isSubmittingQueue}
-            disabled={isSubmittingQueue}
-            variant="secondary"
-          />
-        </FormSection>
-
-        <FormSection title="Incident Status Update">
-          <FormSelect
-            label="Status"
-            selectedValue={statusForm.status}
-            onValueChange={(value) =>
-              setStatusForm((prev) => ({
-                ...prev,
-                status: value,
-              }))
-            }
-            options={STATUS_OPTIONS}
-            placeholder="Select incident status"
-          />
-
-          <FormInput
-            label="Status Note"
-            value={statusForm.note}
-            onChangeText={(value) =>
-              setStatusForm((prev) => ({
-                ...prev,
-                note: value,
-              }))
-            }
-            placeholder="Enter operational or public note"
-            multiline
-          />
-
-          {["REJECTED", "CANCELLED"].includes(statusForm.status) ? (
-            <FormInput
-              label="Rejection / Cancellation Reason"
-              value={statusForm.rejectionReason}
-              onChangeText={(value) =>
-                setStatusForm((prev) => ({
-                  ...prev,
-                  rejectionReason: value,
-                }))
-              }
-              placeholder="Enter reason"
-              multiline
-            />
-          ) : null}
-
-          <AppButton
-            title={isSubmittingStatus ? "Updating..." : "Update Status"}
-            onPress={handleUpdateStatus}
-            loading={isSubmittingStatus}
-            disabled={isSubmittingStatus}
-          />
-        </FormSection>
-
-        <FormSection title="Patients">
-          <FormInput
-            label="Add Patient Note"
-            value={addPatientNote}
-            onChangeText={setAddPatientNote}
-            placeholder="Optional note"
-            multiline
-          />
-
-          <AppButton
-            title={isAddingPatient ? "Adding..." : "Add Patient"}
-            onPress={handleAddPatient}
-            loading={isAddingPatient}
-            disabled={isAddingPatient}
-            variant="secondary"
-          />
-
-          {activePatients.length ? (
-            activePatients.map((patient) => {
-              const latestTriage = patient.triages?.[0] || null;
-
-              return (
-                <Pressable
-                  key={patient.id}
-                  style={[
-                    styles.patientCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderRadius: radius.lg,
-                      padding: spacing.md,
-                    },
-                    shadow,
-                  ]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/staff/patient-details",
-                      params: { patientId: patient.id },
-                    })
-                  }
-                >
-                  <View style={styles.badgeRow}>
-                    <StatusBadge label={patient.status} type="info" />
-                    {latestTriage ? (
-                      <StatusBadge
-                        label={latestTriage.urgencyLevel}
-                        type={getPriorityType(latestTriage.urgencyLevel)}
-                      />
-                    ) : null}
-                  </View>
-
-                  <Text style={[typography.label, { color: colors.text }]}>
-                    {patient.patientCode}
-                  </Text>
-
-                  <Text style={[typography.body, { color: colors.textMuted }]}>
-                    {patient.fullName || "Unnamed patient"}
-                  </Text>
-
-                  {patient.resourceRequests?.length ? (
-                    <View style={{ marginTop: 8 }}>
-                      {patient.resourceRequests.map((request) => (
-                        <View key={request.id} style={styles.requestLine}>
-                          <View style={styles.badgeRow}>
-                            <StatusBadge
-                              label={request.resourceCategory?.name || "RESOURCE"}
-                              type={getCategoryType(request.resourceCategory?.name)}
-                            />
-                            <StatusBadge
-                              label={request.requestStatus}
-                              type={getRequestType(request.requestStatus)}
-                            />
-                          </View>
-                          <Text style={[typography.body, { color: colors.textMuted }]}>
-                            {request.requestReason}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })
-          ) : (
-            <EmptyStateCard
-              title="No Patients"
-              message="No patients have been added to this incident yet."
-              icon="people-outline"
-            />
-          )}
-        </FormSection>
-
-        <ThreadPanel
-          title="Incident Communication"
-          loadKey={incident.id}
-          loadThread={() => getIncidentThreadUiService(incident.id)}
-        />
-
-        <FormSection title="Status Timeline">
-          {incident.statusHistory?.length ? (
-            incident.statusHistory.map((item) => (
+          <FormSection title="Incident Response Assessment">
+            {incident.aiAssessment ? (
               <View
-                key={item.id}
                 style={[
-                  styles.timelineItem,
+                  styles.card,
                   {
-                    borderLeftColor: colors.primary,
                     backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.lg,
+                    padding: spacing.md,
                   },
+                  shadow,
                 ]}
               >
-                <Text style={[typography.label, { color: colors.text }]}>
-                  {item.status}
+                <View style={styles.badgeRow}>
+                  <StatusBadge
+                    label={incident.aiAssessment.priorityLevel}
+                    type={getPriorityType(incident.aiAssessment.priorityLevel)}
+                  />
+                </View>
+
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Confidence: {incident.aiAssessment.confidence}%
                 </Text>
-                <Text style={[typography.body, { color: colors.textMuted }]}>
-                  {new Date(item.createdAt).toLocaleString()}
+
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Recommended Action:{" "}
+                  {incident.aiAssessment.recommendedNextAction}
                 </Text>
-                {item.note ? (
+
+                <Text style={[typography.body, { color: colors.text }]}>
+                  Basis: {incident.aiAssessment.analysisBasis}
+                </Text>
+
+                {incident.aiAssessment.keyRiskFactors?.length ? (
                   <Text style={[typography.body, { color: colors.text }]}>
-                    {item.note}
+                    Key Risk Factors:{" "}
+                    {incident.aiAssessment.keyRiskFactors.join("; ")}
                   </Text>
                 ) : null}
               </View>
-            ))
-          ) : (
-            <EmptyStateCard
-              title="No Status History"
-              message="No timeline entries are available yet."
-              icon="time-outline"
-            />
-          )}
-        </FormSection>
-      </ScrollView>
+            ) : (
+              <EmptyStateCard
+                title="No Incident Assessment"
+                message="Run assessment to refresh incident response priority."
+                icon="sparkles-outline"
+              />
+            )}
 
-      <StaffNavBar activeRoute="/staff/incidents" />
-    </>
+            <AppButton
+              title={isAnalyzing ? "Assessing..." : "Run Incident Assessment"}
+              onPress={handleAnalyzeIncident}
+              loading={isAnalyzing}
+              disabled={isAnalyzing}
+            />
+          </FormSection>
+
+          <FormSection title="Queue Override">
+            <Text style={[typography.body, { color: colors.text }]}>
+              Final Priority Level:{" "}
+              {incident.queuePriority?.finalPriorityLevel || "Not set"}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Final Priority Score:{" "}
+              {incident.queuePriority?.finalPriorityScore ?? "Not set"}
+            </Text>
+
+            <Text style={[typography.body, { color: colors.text }]}>
+              Current Manual Rank:{" "}
+              {incident.queuePriority?.manualOverrideRank ?? "None"}
+            </Text>
+
+            <FormSelect
+              label="Queue Override Level"
+              selectedValue={queueForm.overrideLevel}
+              onValueChange={(value) =>
+                setQueueForm((prev) => ({
+                  ...prev,
+                  overrideLevel: value,
+                }))
+              }
+              options={QUEUE_OVERRIDE_OPTIONS}
+              placeholder="Select override level"
+            />
+
+            <FormInput
+              label="Override Reason"
+              value={queueForm.overrideReason}
+              onChangeText={(value) =>
+                setQueueForm((prev) => ({
+                  ...prev,
+                  overrideReason: value,
+                }))
+              }
+              placeholder="Why is this incident being moved in the queue?"
+              multiline
+            />
+
+            <FormInput
+              label="Expected Action"
+              value={queueForm.expectedAction}
+              onChangeText={(value) =>
+                setQueueForm((prev) => ({
+                  ...prev,
+                  expectedAction: value,
+                }))
+              }
+              placeholder="e.g. Prepare resuscitation bay, alert theatre, monitor only..."
+              multiline
+            />
+
+            <AppButton
+              title={isReordering ? "Applying..." : "Apply Queue Override"}
+              onPress={handleQueueOverride}
+              loading={isReordering}
+              disabled={isReordering}
+              variant="secondary"
+            />
+          </FormSection>
+
+          <FormSection title="Incident Status Update">
+            <FormSelect
+              label="Status"
+              selectedValue={statusForm.status}
+              onValueChange={(value) =>
+                setStatusForm((prev) => ({ ...prev, status: value }))
+              }
+              options={STATUS_OPTIONS}
+              placeholder="Select status"
+            />
+
+            {statusForm.status === "REJECTED" ||
+            statusForm.status === "CANCELLED" ? (
+              <FormInput
+                label="Rejection / Cancellation Reason"
+                value={statusForm.rejectionReason}
+                onChangeText={(value) =>
+                  setStatusForm((prev) => ({
+                    ...prev,
+                    rejectionReason: value,
+                  }))
+                }
+                placeholder="Explain reason"
+                multiline
+              />
+            ) : null}
+
+            <FormInput
+              label="Status Note"
+              value={statusForm.note}
+              onChangeText={(value) =>
+                setStatusForm((prev) => ({ ...prev, note: value }))
+              }
+              placeholder="Enter operational or public note"
+              multiline
+            />
+
+            <AppButton
+              title={isUpdatingStatus ? "Updating..." : "Update Status"}
+              onPress={handleUpdateStatus}
+              loading={isUpdatingStatus}
+              disabled={isUpdatingStatus}
+            />
+          </FormSection>
+
+          <FormSection title="Patients">
+            <FormInput
+              label="Add Patient Note"
+              value={patientNote}
+              onChangeText={setPatientNote}
+              placeholder="Optional note"
+              multiline
+            />
+
+            <AppButton
+              title={isAddingPatient ? "Adding..." : "Add Patient"}
+              onPress={handleAddPatient}
+              loading={isAddingPatient}
+              disabled={isAddingPatient}
+              variant="secondary"
+            />
+
+            {incident.patients?.length ? (
+              incident.patients.map((patient) => {
+                const latestTriage = patient.triages?.[0] || null;
+
+                return (
+                  <Pressable
+                    key={patient.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/staff/patient-details",
+                        params: { patientId: patient.id },
+                      })
+                    }
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        borderRadius: radius.lg,
+                        padding: spacing.md,
+                      },
+                      shadow,
+                    ]}
+                  >
+                    <View style={styles.headerRow}>
+                      <Text style={[styles.cardTitle, { color: colors.text }]}>
+                        {patient.fullName || patient.patientCode}
+                      </Text>
+
+                      {latestTriage ? (
+                        <StatusBadge
+                          label={latestTriage.urgencyLevel}
+                          type={getPriorityType(latestTriage.urgencyLevel)}
+                        />
+                      ) : (
+                        <StatusBadge label={patient.status} type="warning" />
+                      )}
+                    </View>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Status: {patient.status}
+                    </Text>
+
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Requests: {patient.resourceRequests?.length || 0}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <EmptyStateCard
+                title="No Patients"
+                message="No patients have been added to this incident yet."
+                icon="people-outline"
+              />
+            )}
+          </FormSection>
+
+          <FormSection title="Status Timeline">
+            {incident.statusHistory?.length ? (
+              incident.statusHistory.map((item) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.timelineItem,
+                    {
+                      backgroundColor: colors.surface,
+                      borderLeftColor: colors.primary,
+                    },
+                  ]}
+                >
+                  <Text style={[typography.label, { color: colors.text }]}>
+                    {item.status}
+                  </Text>
+
+                  <Text style={[typography.body, { color: colors.textMuted }]}>
+                    {new Date(item.createdAt).toLocaleString()}
+                  </Text>
+
+                  {item.note ? (
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      {item.note}
+                    </Text>
+                  ) : null}
+
+                  {item.rejectionReason ? (
+                    <Text style={[typography.body, { color: colors.text }]}>
+                      Reason: {item.rejectionReason}
+                    </Text>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <EmptyStateCard
+                title="No Timeline"
+                message="No status updates have been recorded yet."
+                icon="time-outline"
+              />
+            )}
+          </FormSection>
+        </ScrollView>
+
+        <StaffNavBar activeRoute="/staff/incidents" />
+      </>
+    </RoleGuard>
   );
 }
 
-function MiniCard({ label, value, colors, typography, radius, spacing, shadow }) {
+function SummaryCard({
+  label,
+  value,
+  colors,
+  typography,
+  radius,
+  spacing,
+  shadow,
+}) {
   return (
     <View
       style={[
-        styles.miniCard,
+        styles.summaryCard,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
@@ -814,8 +861,10 @@ function MiniCard({ label, value, colors, typography, radius, spacing, shadow })
         shadow,
       ]}
     >
-      <Text style={[typography.label, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.miniValue, { color: colors.text }]}>{value}</Text>
+      <Text style={[typography.label, { color: colors.textMuted }]}>
+        {label}
+      </Text>
+      <Text style={[styles.summaryValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
@@ -828,41 +877,43 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-  },
-  incidentImage: {
-    width: "100%",
-    height: 260,
-    borderRadius: 12,
-    marginTop: 8,
+    marginBottom: 10,
   },
   summaryWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
   },
-  miniCard: {
+  summaryCard: {
     borderWidth: 1,
     minWidth: 140,
   },
-  miniValue: {
-    fontSize: 20,
+  summaryValue: {
+    fontSize: 22,
     fontWeight: "800",
     marginTop: 6,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 8,
     marginBottom: 8,
   },
-  patientCard: {
-    borderWidth: 1,
-    marginBottom: 10,
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 8,
   },
-  requestLine: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  incidentImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 12,
+    marginTop: 12,
   },
   timelineItem: {
     borderLeftWidth: 4,
